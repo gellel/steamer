@@ -10,6 +10,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+const steamStoreSearchURL string = "https://store.steampowered.com/search/"
+
 var wg sync.WaitGroup
 
 var mutex = sync.RWMutex{}
@@ -20,7 +22,7 @@ var writer = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 
 func main() {
 	attrDataParam := "data-param"
-	resp, err := http.Get("https://store.steampowered.com/search/")
+	resp, err := http.Get(steamStoreSearchURL)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -67,6 +69,9 @@ func main() {
 	})
 	wg.Wait()
 	close(c)
+	if ok := len(searchQueryCatalogue) == 0; ok {
+		os.Exit(1)
+	}
 	var i int
 	for dataParam := range searchQueryCatalogue {
 		fmt.Fprintln(writer, fmt.Sprintf("%v\t|%s", i, dataParam))
@@ -76,6 +81,7 @@ func main() {
 		}
 		fmt.Fprintln(writer)
 	}
+	fmt.Fprintln(writer, "STEAMER.EXE\t>>>\tPLEASE ADD ALL REQUIRED FILTERS:")
 	err = writer.Flush()
 	if err != nil {
 		os.Exit(1)
