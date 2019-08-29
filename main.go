@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"text/tabwriter"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -14,6 +15,8 @@ var wg sync.WaitGroup
 var mutex = sync.RWMutex{}
 
 var searchQueryCatalogue = map[string]map[string]string{}
+
+var writer = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 
 func main() {
 	attrDataParam := "data-param"
@@ -46,16 +49,35 @@ func main() {
 					searchQueryCatalogue[dataParam] = map[string]string{}
 				}
 				s := <-c
-				queryKey, _ := s.Attr("[data-loc]")
-				queryValue, _ := s.Attr("[data-value]")
+				queryKey, ok := s.Attr("data-loc")
+				if ok != true {
+					mutex.Unlock()
+					return
+				}
+				queryValue, ok := s.Attr("data-value")
+				if ok != true {
+					mutex.Unlock()
+					return
+				}
 				searchQueryCatalogue[dataParam][queryKey] = queryValue
 				mutex.Unlock()
+
 			}(c, dataParam)
 		}
 	})
 	wg.Wait()
 	close(c)
+	var i int
 	for dataParam := range searchQueryCatalogue {
-		fmt.Println(dataParam)
+		fmt.Fprintln(writer, fmt.Sprintf("%v\t|%s", i, dataParam))
+		i = i + 1
+		for queryKey := range searchQueryCatalogue[dataParam] {
+			fmt.Fprintln(writer, fmt.Sprintf("\t|%s", queryKey))
+		}
+		fmt.Fprintln(writer)
+	}
+	err = writer.Flush()
+	if err != nil {
+		os.Exit(1)
 	}
 }
