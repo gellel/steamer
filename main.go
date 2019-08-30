@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/tabwriter"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -32,7 +34,11 @@ var searchQueryReverse = map[string]string{}
 
 var queryMap = map[string][]string{}
 
-//var writer = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
+var maxPages int
+
+var currentPage int
+
+var writer = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 
 var scanner = bufio.NewScanner(os.Stdin)
 
@@ -134,10 +140,6 @@ func main() {
 		fmt.Println(strings.Repeat("-", sY))
 	}
 	fmt.Println("STEAMER.EXE\t>>>\tPLEASE INPUT ALL REQUIRED FILTERS:")
-	/*err = writer.Flush()
-	if err != nil {
-		os.Exit(1)
-	}*/
 	// wait for user input to collect the desired number of search query filters.
 	if ok := scanner.Scan(); !ok {
 		os.Exit(1)
@@ -181,6 +183,7 @@ func main() {
 	// http.Get the steam store but using the formatted queryString.
 	resp, err = http.Get(steamStoreSearchURLwithQuery)
 	if err != nil {
+		fmt.Println("STEAMER.EXE\t>>>\tCANNOT REACH STEAM STORE.")
 		os.Exit(1)
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -191,21 +194,73 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
-	steamSearchCaption := strings.ToUpper(doc.Find(".search_pagination_left").Text())
-	r, err = regexp.Compile(`\r?\n`)
-	if err != nil {
+	// find the number of pages that are required to be processed
+	s = doc.Find(".search_pagination_right>a:not(.pagebtn)")
+	if ok := s.Length() > 0; !ok {
+		fmt.Println("STEAMER.EXE\t>>>\tNO RESULTS WERE FOUND FOR THAT QUERY.")
 		os.Exit(1)
 	}
-	steamSearchCaption = r.ReplaceAllString(steamSearchCaption, "")
-	fmt.Println(strings.Split(steamSearchCaption, "OF"))
-
-	/*
-		// find the available steam store game options.
-		s = doc.Find(fmt.Sprintf("[%s]", "data-ds-appid"))
-		l = s.Length()
-		// confirm that there are at least some items to process.
-		if ok := l > 0; !ok {
-			os.Exit(1)
+	s.Each(func(i int, s *goquery.Selection) {
+		nthPage, err := strconv.Atoi(strings.TrimSpace(s.Text()))
+		if err != nil {
+			return
 		}
-		fmt.Println("games:", l)*/
+		maxPages = int(math.Max(float64(nthPage), float64(maxPages)))
+	})
+	s = doc.Find("[data-ds-appid]")
+	l = s.Length()
+	if ok := l > 0; !ok {
+		fmt.Println("STEAMER.EXE\t>>>\tPROGRAM COULD NOT FIND RECORDS TO PROCESS.")
+		os.Exit(1)
+	}
+	// os.STDOUT program action.
+	fmt.Println(fmt.Sprintf("STEAMER.EXE\t>>>\tPROGRAM FOUND A TOTAL OF %v PAGES TO PROCESS.", l))
+	//for i := currentPage + 1; i <= maxPages; i++ {
+	//fmt.Println(fmt.Sprintf("%s&page=%v", steamStoreSearchURLwithQuery, i))
+	//}
+	fmt.Println(strings.Repeat("-", sY))
+	//c := make(chan *goquery.Selection, l)
+	s.Each(func(i int, s *goquery.Selection) {
+		// get the game title from the current html token
+		gTitle := strings.TrimSpace(s.Find(".title").Text())
+		// get the release date
+		gReleaseDate := strings.TrimSpace(s.Find(".search_released").Text())
+		// get the game sentiment
+		gReviewSentiment := strings.TrimSpace(s.Find(".search_review_summary").AttrOr("data-tooltip-html", "NIL"))
+		gReviewSentiment = strings.ReplaceAll(gReviewSentiment, "<br>", " ")
+		// get the direct link to the game from the html token.
+		gHref := s.AttrOr("href", "NIL")
+		// get the appID
+		gAppID := s.AttrOr("data-ds-appid", "NIL")
+		// get the bundleID
+		gBundleID := s.AttrOr("data-ds-bundleid", "NIL")
+		// get the ctrlID
+		gCtrlID := s.AttrOr("data-ds-crtrids", "NIL")
+		// get the descID
+		gDescID := s.AttrOr("data-ds-descids", "NIL")
+		// get the package ID from the current html token
+		gPkgID := s.AttrOr("data-ds-packageid", "NIL")
+		// get the tagIDs from the html token
+		gTagID := s.AttrOr("data-ds-tagids", "NIL")
+		gPriceDiscount := strings.TrimSpace(s.Find(".search_discount>span").Text())
+		gPriceCurrent := strings.TrimSpace(s.Find(".search_price").Text())
+		if len(gPriceDiscount) == 0 {
+			gPriceDiscount = "0%"
+		}
+		//, strings.Repeat("-", (sY-len(title)+2))
+		fmt.Fprintln(writer, fmt.Sprintf("[%s]%s", strings.ToUpper(gTitle), strings.Repeat("-", (sY-len(gTitle)+2))))
+		fmt.Fprintln(writer, fmt.Sprintf("RELEASE DATE\t|%s", gReleaseDate))
+		fmt.Fprintln(writer, fmt.Sprintf("SENTIMENT\t|%s", gReviewSentiment))
+		fmt.Fprintln(writer, fmt.Sprintf("HREF\t|%s", gHref))
+		fmt.Fprintln(writer, fmt.Sprintf("ID-APP\t|%s", gAppID))
+		fmt.Fprintln(writer, fmt.Sprintf("ID-BUNDLE\t|%s", gBundleID))
+		fmt.Fprintln(writer, fmt.Sprintf("ID-CTRL\t|%s", gCtrlID))
+		fmt.Fprintln(writer, fmt.Sprintf("ID-DESC\t|%s", gDescID))
+		fmt.Fprintln(writer, fmt.Sprintf("ID-PACKAGE\t|%s", gPkgID))
+		fmt.Fprintln(writer, fmt.Sprintf("ID-TAG\t|%s", gTagID))
+		fmt.Fprintln(writer, fmt.Sprintf("PRICE-CURRENT\t|%s", gPriceCurrent))
+		fmt.Fprintln(writer, fmt.Sprintf("PRICE-DISCOUNT\t|%s", gPriceDiscount))
+		fmt.Fprintln(writer)
+	})
+	writer.Flush()
 }
