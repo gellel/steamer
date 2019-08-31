@@ -90,7 +90,24 @@ func scrapeGamePage(d *goquery.Document) {
 	fmt.Println("-")
 }
 
-func netrunnerPages(c chan string) {
+func netrunnerGamePages(c chan string) {
+	defer wg.Done()
+	req, err := http.NewRequest(http.MethodGet, <-c, nil)
+	if err != nil {
+		return
+	}
+	res, err := client.Do(req)
+	if res.StatusCode != http.StatusOK {
+		return
+	}
+	doc, err := goquery.NewDocumentFromResponse(res)
+	if err != nil {
+		return
+	}
+	scrapeGamePage(doc)
+}
+
+func netrunnerStorePages(c chan string) {
 	defer wg.Done()
 	req, err := http.NewRequest(http.MethodGet, <-c, nil)
 	if err != nil {
@@ -116,23 +133,6 @@ func netrunnerPages(c chan string) {
 	})
 }
 
-func netrunnerGame(c chan string) {
-	defer wg.Done()
-	req, err := http.NewRequest(http.MethodGet, <-c, nil)
-	if err != nil {
-		return
-	}
-	res, err := client.Do(req)
-	if res.StatusCode != http.StatusOK {
-		return
-	}
-	doc, err := goquery.NewDocumentFromResponse(res)
-	if err != nil {
-		return
-	}
-	scrapeGamePage(doc)
-}
-
 func main() {
 	scanner = bufio.NewScanner(os.Stdin)
 	if ok := scanner.Scan(); !ok {
@@ -148,7 +148,7 @@ func main() {
 	for i := 1; i < n+1; i++ {
 		wg.Add(1)
 		c <- fmt.Sprintf("%s?page=%d", steamSearchURL, i)
-		netrunnerPages(c)
+		netrunnerStorePages(c)
 	}
 	wg.Wait()
 	close(c)
@@ -156,7 +156,7 @@ func main() {
 	for _, href := range hrefGroup {
 		wg.Add(1)
 		c <- href
-		netrunnerGame(c)
+		netrunnerGamePages(c)
 	}
 	wg.Wait()
 	close(c)
