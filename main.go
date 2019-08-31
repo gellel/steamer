@@ -13,6 +13,12 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+type game struct {
+	ID   string
+	Tags []string
+	URL  string
+}
+
 const steamSearchURL string = "https://store.steampowered.com/search/"
 
 var hrefGroup []string
@@ -67,6 +73,11 @@ func scrapeGameMeta(d *goquery.Document) {
 	})
 }
 
+func scrapeGamePublisher(d *goquery.Document) {
+	publisher := strings.TrimSpace(d.Find("div.dev_row > b:first-child + a").First().Text())
+	fmt.Println("publisher:", publisher)
+}
+
 func scrapeGameTags(d *goquery.Document) {
 	d.Find("a.app_tag").Each(func(i int, s *goquery.Selection) {
 		fmt.Println("tag:", strings.TrimSpace(s.Text()))
@@ -84,10 +95,35 @@ func scrapeGamePage(d *goquery.Document) {
 	scrapeGameDescription(d)
 	scrapeGameDevelopers(d)
 	scrapeGameLanguages(d)
+	scrapeGamePublisher(d)
 	scrapeGameMeta(d)
 	scrapeGameTags(d)
 	scrapeGameTitle(d)
 	fmt.Println("-")
+}
+
+func scrapePageItemHrefAttribute(s *goquery.Selection) {
+	href, exists := s.Attr("href")
+	if exists != true {
+		return
+	}
+	hrefGroup = append(hrefGroup, href)
+}
+
+func scrapePageItemAppIDAttribute(s *goquery.Selection) {
+	ID := strings.TrimSpace(s.AttrOr("data-ds-appid", "NIL"))
+	fmt.Println("app ID:", ID)
+}
+
+func scrapePageItemBundleIDAttribute(s *goquery.Selection) {
+	ID := strings.TrimSpace(s.AttrOr("data-ds-bundleid", "NIL"))
+	fmt.Println("bundle ID:", ID)
+}
+
+func scrapePageItem(s *goquery.Selection) {
+	scrapePageItemAppIDAttribute(s)
+	scrapePageItemBundleIDAttribute(s)
+	scrapePageItemHrefAttribute(s)
 }
 
 func netrunnerGamePages(c chan string) {
@@ -125,11 +161,7 @@ func netrunnerStorePages(c chan string) {
 		return
 	}
 	doc.Find("a.search_result_row").Each(func(i int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if exists != true {
-			return
-		}
-		hrefGroup = append(hrefGroup, href)
+		scrapePageItem(s)
 	})
 }
 
