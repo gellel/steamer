@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,8 +31,9 @@ type game struct {
 	Meta               []gameMeta
 	Name               string
 	PackageID          string
-	Publisher          string
+	Publisher          []gamePublisher
 	ReleaseDate        string
+	Requirements       []gameRequirement
 	TagID              string
 	Tags               []string
 	Title              string
@@ -65,7 +68,21 @@ type gameMeta struct {
 	Property string
 }
 
-type gameRequirements struct {
+type gamePublisher struct {
+	Name string
+	URL  string
+}
+
+type gameRequirement struct {
+	DirectX   string `json:"directx"`
+	Graphics  string `json:"graphics"`
+	Memory    string `json:"memory"`
+	Name      string `json:"name"`
+	Network   string `json:"network"`
+	OS        string `json:"os"`
+	Processor string `json:"processor"`
+	SoundCard string `json:"soundcard"`
+	Storage   string `json:"storage"`
 }
 
 const steamSearchURL string = "https://store.steampowered.com/search/"
@@ -117,6 +134,17 @@ func scrapeGameDevelopers(d *goquery.Document) []gameDeveloper {
 	return gameDevelopers
 }
 
+func scrapeGameGenre(d *goquery.Document) []gameGenre {
+	a := d.Find("div.game_details div.details_block:first-child > a")
+	gameGenres := make([]gameGenre, a.Length())
+	a.Each(func(i int, s *goquery.Selection) {
+		gameGenres[i] = gameGenre{
+			Name: strings.TrimSpace(s.Text()),
+			URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+	})
+	return gameGenres
+}
+
 func scrapeGameLanguages(d *goquery.Document) []gameLanguage {
 	tr := d.Find("table.game_language_options tr[class='']")
 	gameLanguages := make([]gameLanguage, tr.Length())
@@ -155,9 +183,15 @@ func scrapeGameMeta(d *goquery.Document) []gameMeta {
 	return gameMetaTags
 }
 
-func scrapeGamePublisher(d *goquery.Document) string {
-	publisher := strings.TrimSpace(d.Find("div.dev_row > b:first-child + a").First().Text())
-	return publisher
+func scrapeGamePublisher(d *goquery.Document) []gamePublisher {
+	a := d.Find("div.dev_row > b:first-child + a")
+	gamePublishers := make([]gamePublisher, a.Length())
+	a.Each(func(i int, s *goquery.Selection) {
+		gamePublishers[i] = gamePublisher{
+			Name: strings.TrimSpace(s.Text()),
+			URL:  s.AttrOr("href", "NIL")}
+	})
+	return gamePublishers
 }
 
 func scrapeGameTags(d *goquery.Document) []string {
@@ -174,8 +208,31 @@ func scrapeGameTitle(d *goquery.Document) string {
 	return title
 }
 
-func scrapeGameRequirements(d *goquery.Document) {
-	d.Find("div.game_area_sys_req[data-os]")
+func scrapeGameRequirements(d *goquery.Document) []gameRequirement {
+	gameRequirements := []gameRequirement{}
+	d.Find("div.game_area_sys_req[data-os]").Each(func(_ int, s *goquery.Selection) {
+		reg := regexp.MustCompile(`[^a-zA-Z]+`)
+		gameRequirement := gameRequirement{
+			Name: strings.TrimSpace(s.AttrOr("data-os", "NIL"))}
+		s.Find("ul.bb_ul").First().Each(func(i int, s *goquery.Selection) {
+			m := map[string]string{}
+			s.Find("li").Each(func(j int, s *goquery.Selection) {
+				key := s.Find("strong").First().Text()
+				key = reg.ReplaceAllString(key, "")
+				key = strings.ToLower(key)
+				m[key] = strings.TrimSpace(s.Text())
+			})
+			b, err := json.Marshal(m)
+			if err != nil {
+				panic(err)
+			}
+			if err := json.Unmarshal(b, &gameRequirement); err != nil {
+				panic(err)
+			}
+			gameRequirements = append(gameRequirements, gameRequirement)
+		})
+	})
+	return gameRequirements
 }
 
 func scrapeGamePage(d *goquery.Document) game {
@@ -188,10 +245,12 @@ func scrapeGamePage(d *goquery.Document) game {
 	game.Description = scrapeGameDescription(d)
 	game.DescriptionVerbose = scrapeGameDescriptionVerbose(d)
 	game.Developer = scrapeGameDevelopers(d)
+	game.Genre = scrapeGameGenre(d)
 	game.Languages = scrapeGameLanguages(d)
 	game.Meta = scrapeGameMeta(d)
 	game.Publisher = scrapeGamePublisher(d)
 	game.ReleaseDate = scrapeGameDate(d)
+	game.Requirements = scrapeGameRequirements(d)
 	game.Title = scrapeGameTitle(d)
 	game.Tags = scrapeGameTags(d)
 	gameMap[ID] = game
