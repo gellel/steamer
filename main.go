@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -78,7 +80,9 @@ func scrapeGameCategory(d *goquery.Document) []gameCategory {
 	a := d.Find("div.game_area_details_specs a.name")
 	gameCategories := make([]gameCategory, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
-		gameCategories[i] = gameCategory{URL: strings.TrimSpace(s.Text())}
+		gameCategories[i] = gameCategory{
+			Name: strings.TrimSpace(s.Text()),
+			URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
 	})
 	return gameCategories
 }
@@ -97,7 +101,9 @@ func scrapeGameDevelopers(d *goquery.Document) []gameDeveloper {
 	a := d.Find("#developers_list a")
 	gameDevelopers := make([]gameDeveloper, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
-		gameDevelopers[i] = gameDeveloper{Name: strings.TrimSpace(s.Text())}
+		gameDevelopers[i] = gameDeveloper{
+			Name: strings.TrimSpace(s.Text()),
+			URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
 	})
 	return gameDevelopers
 }
@@ -160,7 +166,12 @@ func scrapeGameTitle(d *goquery.Document) string {
 }
 
 func scrapeGamePage(d *goquery.Document) game {
-	game := gameMap[d.Url.String()]
+	ID := d.Url.String()
+	game, ok := gameMap[ID]
+	if ok != true {
+		fmt.Println(ID)
+		panic("game not found!")
+	}
 	game.Categories = scrapeGameCategory(d)
 	game.Description = scrapeGameDescription(d)
 	game.Developer = scrapeGameDevelopers(d)
@@ -170,6 +181,7 @@ func scrapeGamePage(d *goquery.Document) game {
 	game.ReleaseDate = scrapeGameDate(d)
 	game.Title = scrapeGameTitle(d)
 	game.Tags = scrapeGameTags(d)
+	gameMap[ID] = game
 	return game
 }
 
@@ -236,7 +248,11 @@ func netrunnerGamePages(c chan string) {
 	if err != nil {
 		return
 	}
+	req.Header.Set("Cookie", "birthtime=-949485599; lastagecheckage=1-0-1900; wants_mature_content=1")
 	res, err := client.Do(req)
+	if err != nil {
+		return
+	}
 	if res.StatusCode != http.StatusOK {
 		return
 	}
@@ -269,6 +285,17 @@ func netrunnerStorePages(c chan string) {
 	})
 }
 
+func fGamePrintln(w *tabwriter.Writer, game game) {
+	s := reflect.ValueOf(&game).Elem()
+	typeOfT := s.Type()
+
+	for i := 0; i < s.NumField(); i++ {
+		f := s.Field(i)
+		fmt.Fprintln(w, fmt.Sprintf("%s\t|%v", typeOfT.Field(i).Name, f.Interface()))
+	}
+	//"%d: %s %s = %v\n", i, typeOfT.Field(i).Name, f.Type(), f.Interface()
+}
+
 func main() {
 	gameMap = make(map[string]game)
 	scanner = bufio.NewScanner(os.Stdin)
@@ -279,6 +306,7 @@ func main() {
 	if err != nil {
 		return
 	}
+	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tcollecting %d pages", n))
 	client = (&http.Client{Timeout: (time.Second * 1)})
 	c := make(chan string, n)
 	hrefGroup = []string{}
@@ -289,6 +317,7 @@ func main() {
 	}
 	wg.Wait()
 	close(c)
+	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tfound %d games", len(hrefGroup)))
 	c = make(chan string, len(hrefGroup))
 	for _, href := range hrefGroup {
 		wg.Add(1)
@@ -297,8 +326,11 @@ func main() {
 	}
 	wg.Wait()
 	close(c)
+	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tbuilt %d games", len(gameMap)))
+	w := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 	for _, game := range gameMap {
-
-		fmt.Println(game)
+		fGamePrintln(w, game)
+		fmt.Fprintln(w, "")
 	}
+	w.Flush()
 }
