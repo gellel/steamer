@@ -14,12 +14,57 @@ import (
 )
 
 type game struct {
-	ID   string
-	Tags []string
+	AppID         string
+	BundleID      string
+	Categories    []gameCategory
+	CrtrID        string
+	DescriptionID string
+	Description   string
+	Developer     []gameDeveloper
+	Genre         []gameGenre
+	Languages     []gameLanguage
+	Meta          []gameMeta
+	Name          string
+	PackageID     string
+	Publisher     string
+	ReleaseDate   string
+	TagID         string
+	Tags          []string
+	Title         string
+	URL           string
+}
+
+type gameCategory struct {
+	Name string
 	URL  string
 }
 
+type gameDeveloper struct {
+	Name string
+	URL  string
+}
+
+type gameGenre struct {
+	Name string
+	URL  string
+}
+
+type gameLanguage struct {
+	Audio     bool
+	Interface bool
+	Name      string
+	Subtitles bool
+}
+
+type gameMeta struct {
+	Content  string
+	Name     string
+	Property string
+}
+
 const steamSearchURL string = "https://store.steampowered.com/search/"
+
+var gameMap map[string]game
 
 var hrefGroup []string
 
@@ -29,101 +74,160 @@ var scanner *bufio.Scanner
 
 var wg sync.WaitGroup
 
-func scrapeGameCategory(d *goquery.Document) {
-	d.Find("div.game_area_details_specs a.name").Each(func(i int, s *goquery.Selection) {
-		fmt.Println("category:", strings.TrimSpace(s.Text()))
+func scrapeGameCategory(d *goquery.Document) []gameCategory {
+	a := d.Find("div.game_area_details_specs a.name")
+	gameCategories := make([]gameCategory, a.Length())
+	a.Each(func(i int, s *goquery.Selection) {
+		gameCategories[i] = gameCategory{URL: strings.TrimSpace(s.Text())}
 	})
+	return gameCategories
 }
 
-func scrapeGameDate(d *goquery.Document) {
+func scrapeGameDate(d *goquery.Document) string {
 	date := strings.TrimSpace(d.Find("div.release_date div.date").First().Text())
-	fmt.Println("release date:", date)
+	return date
 }
 
-func scrapeGameDescription(d *goquery.Document) {
+func scrapeGameDescription(d *goquery.Document) string {
 	description := strings.TrimSpace(d.Find("div.game_description_snippet").First().Text())
-	fmt.Println("descripton:", description)
+	return description
 }
 
-func scrapeGameDevelopers(d *goquery.Document) {
-	d.Find("#developers_list a").Each(func(i int, s *goquery.Selection) {
-		fmt.Println("developer:", strings.TrimSpace(s.Text()))
+func scrapeGameDevelopers(d *goquery.Document) []gameDeveloper {
+	a := d.Find("#developers_list a")
+	gameDevelopers := make([]gameDeveloper, a.Length())
+	a.Each(func(i int, s *goquery.Selection) {
+		gameDevelopers[i] = gameDeveloper{Name: strings.TrimSpace(s.Text())}
 	})
+	return gameDevelopers
 }
 
-func scrapeGameLanguages(d *goquery.Document) {
-	d.Find("table.game_language_options tr[class='']").Each(func(i int, s *goquery.Selection) {
+func scrapeGameLanguages(d *goquery.Document) []gameLanguage {
+	tr := d.Find("table.game_language_options tr[class='']")
+	gameLanguages := make([]gameLanguage, tr.Length())
+	tr.Each(func(i int, s *goquery.Selection) {
 		var (
 			lang      = strings.TrimSpace(s.Find("td:nth-child(1)").Text())
-			audio     = strings.TrimSpace(s.Find("td:nth-child(2)").Text())
-			subtitles = strings.TrimSpace(s.Find("td:nth-child(3)").Text())
+			inter     = strings.TrimSpace(s.Find("td:nth-child(2)").Text())
+			audio     = strings.TrimSpace(s.Find("td:nth-child(3)").Text())
+			subtitles = strings.TrimSpace(s.Find("td:nth-child(4)").Text())
 		)
-		fmt.Println("language:", lang, "audio:", (len(audio) != 0), "subtitles:", (len(subtitles) != 0))
+		gameLanguage := gameLanguage{
+			Audio:     (len(audio) != 0),
+			Interface: (len(inter) != 0),
+			Name:      lang,
+			Subtitles: (len(subtitles) != 0)}
+		gameLanguages[i] = gameLanguage
 	})
+	return gameLanguages
 }
 
-func scrapeGameMeta(d *goquery.Document) {
-	d.Find("meta").Each(func(i int, s *goquery.Selection) {
+func scrapeGameMeta(d *goquery.Document) []gameMeta {
+	m := d.Find("meta")
+	gameMetaTags := make([]gameMeta, m.Length())
+	m.Each(func(i int, s *goquery.Selection) {
 		var (
 			content  = s.AttrOr("content", "NIL")
 			name     = s.AttrOr("name", "NIL")
 			property = s.AttrOr("property", "NIL")
 		)
-		fmt.Println("meta:", "content:", content, "name:", name, "property:", property)
+		gameMeta := gameMeta{
+			Content:  content,
+			Name:     name,
+			Property: property}
+		gameMetaTags[i] = gameMeta
 	})
+	return gameMetaTags
 }
 
-func scrapeGamePublisher(d *goquery.Document) {
+func scrapeGamePublisher(d *goquery.Document) string {
 	publisher := strings.TrimSpace(d.Find("div.dev_row > b:first-child + a").First().Text())
-	fmt.Println("publisher:", publisher)
+	return publisher
 }
 
-func scrapeGameTags(d *goquery.Document) {
-	d.Find("a.app_tag").Each(func(i int, s *goquery.Selection) {
-		fmt.Println("tag:", strings.TrimSpace(s.Text()))
+func scrapeGameTags(d *goquery.Document) []string {
+	a := d.Find("a.app_tag")
+	gameTags := make([]string, a.Length())
+	a.Each(func(i int, s *goquery.Selection) {
+		gameTags[i] = strings.TrimSpace(s.Text())
 	})
+	return gameTags
 }
 
-func scrapeGameTitle(d *goquery.Document) {
+func scrapeGameTitle(d *goquery.Document) string {
 	title := strings.TrimSpace(d.Find("div.apphub_AppName").First().Text())
-	fmt.Println("title:", title)
+	return title
 }
 
-func scrapeGamePage(d *goquery.Document) {
-	scrapeGameCategory(d)
-	scrapeGameDate(d)
-	scrapeGameDescription(d)
-	scrapeGameDevelopers(d)
-	scrapeGameLanguages(d)
-	scrapeGamePublisher(d)
-	scrapeGameMeta(d)
-	scrapeGameTags(d)
-	scrapeGameTitle(d)
-	fmt.Println("-")
+func scrapeGamePage(d *goquery.Document) game {
+	game := gameMap[d.Url.String()]
+	game.Categories = scrapeGameCategory(d)
+	game.Description = scrapeGameDescription(d)
+	game.Developer = scrapeGameDevelopers(d)
+	game.Languages = scrapeGameLanguages(d)
+	game.Meta = scrapeGameMeta(d)
+	game.Publisher = scrapeGamePublisher(d)
+	game.ReleaseDate = scrapeGameDate(d)
+	game.Title = scrapeGameTitle(d)
+	game.Tags = scrapeGameTags(d)
+	return game
 }
 
-func scrapePageItemHrefAttribute(s *goquery.Selection) {
+func scrapePageItemHrefAttribute(s *goquery.Selection) string {
 	href, exists := s.Attr("href")
-	if exists != true {
-		return
+	if exists == true {
+		hrefGroup = append(hrefGroup, href)
 	}
-	hrefGroup = append(hrefGroup, href)
+	return href
 }
 
-func scrapePageItemAppIDAttribute(s *goquery.Selection) {
+func scrapePageItemAppIDAttribute(s *goquery.Selection) string {
 	ID := strings.TrimSpace(s.AttrOr("data-ds-appid", "NIL"))
-	fmt.Println("app ID:", ID)
+	return ID
 }
 
-func scrapePageItemBundleIDAttribute(s *goquery.Selection) {
+func scrapePageItemBundleIDAttribute(s *goquery.Selection) string {
 	ID := strings.TrimSpace(s.AttrOr("data-ds-bundleid", "NIL"))
-	fmt.Println("bundle ID:", ID)
+	return ID
 }
 
-func scrapePageItem(s *goquery.Selection) {
-	scrapePageItemAppIDAttribute(s)
-	scrapePageItemBundleIDAttribute(s)
-	scrapePageItemHrefAttribute(s)
+func scrapePageItemCrtrIDAttribute(s *goquery.Selection) string {
+	ID := strings.TrimSpace(s.AttrOr("data-ds-crtrids", "NIL"))
+	return ID
+}
+
+func scrapePageItemDescIDAttribute(s *goquery.Selection) string {
+	ID := strings.TrimSpace(s.AttrOr("data-ds-descids", "NIL"))
+	return ID
+}
+
+func scrapePageItemPackageIDAttribute(s *goquery.Selection) string {
+	ID := strings.TrimSpace(s.AttrOr("data-ds-packageid", "NIL"))
+	return ID
+}
+
+func scrapePageItemTagIDAttribute(s *goquery.Selection) string {
+	ID := strings.TrimSpace(s.AttrOr("data-ds-tagids", "NIL"))
+	return ID
+}
+
+func scrapePageItemTitle(s *goquery.Selection) string {
+	title := strings.TrimSpace(s.Find("div.search_name span.title").Text())
+	return title
+}
+
+func scrapePageItem(s *goquery.Selection) game {
+	game := game{
+		AppID:         scrapePageItemAppIDAttribute(s),
+		BundleID:      scrapePageItemBundleIDAttribute(s),
+		CrtrID:        scrapePageItemCrtrIDAttribute(s),
+		DescriptionID: scrapePageItemDescIDAttribute(s),
+		Name:          scrapePageItemTitle(s),
+		PackageID:     scrapePageItemPackageIDAttribute(s),
+		TagID:         scrapePageItemTagIDAttribute(s),
+		URL:           scrapePageItemHrefAttribute(s)}
+	gameMap[game.URL] = game
+	return game
 }
 
 func netrunnerGamePages(c chan string) {
@@ -166,6 +270,7 @@ func netrunnerStorePages(c chan string) {
 }
 
 func main() {
+	gameMap = make(map[string]game)
 	scanner = bufio.NewScanner(os.Stdin)
 	if ok := scanner.Scan(); !ok {
 		return
@@ -192,4 +297,8 @@ func main() {
 	}
 	wg.Wait()
 	close(c)
+	for _, game := range gameMap {
+
+		fmt.Println(game)
+	}
 }
