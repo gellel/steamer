@@ -16,24 +16,25 @@ import (
 )
 
 type game struct {
-	AppID         string
-	BundleID      string
-	Categories    []gameCategory
-	CrtrID        string
-	DescriptionID string
-	Description   string
-	Developer     []gameDeveloper
-	Genre         []gameGenre
-	Languages     []gameLanguage
-	Meta          []gameMeta
-	Name          string
-	PackageID     string
-	Publisher     string
-	ReleaseDate   string
-	TagID         string
-	Tags          []string
-	Title         string
-	URL           string
+	AppID              string
+	BundleID           string
+	Categories         []gameCategory
+	CrtrID             string
+	DescriptionID      string
+	Description        string
+	DescriptionVerbose string
+	Developer          []gameDeveloper
+	Genre              []gameGenre
+	Languages          []gameLanguage
+	Meta               []gameMeta
+	Name               string
+	PackageID          string
+	Publisher          string
+	ReleaseDate        string
+	TagID              string
+	Tags               []string
+	Title              string
+	URL                string
 }
 
 type gameCategory struct {
@@ -62,6 +63,9 @@ type gameMeta struct {
 	Content  string
 	Name     string
 	Property string
+}
+
+type gameRequirements struct {
 }
 
 const steamSearchURL string = "https://store.steampowered.com/search/"
@@ -95,6 +99,11 @@ func scrapeGameDate(d *goquery.Document) string {
 func scrapeGameDescription(d *goquery.Document) string {
 	description := strings.TrimSpace(d.Find("div.game_description_snippet").First().Text())
 	return description
+}
+
+func scrapeGameDescriptionVerbose(d *goquery.Document) string {
+	descriptionVerbose := strings.TrimSpace(d.Find("#game_area_description").First().Text())
+	return descriptionVerbose
 }
 
 func scrapeGameDevelopers(d *goquery.Document) []gameDeveloper {
@@ -165,15 +174,19 @@ func scrapeGameTitle(d *goquery.Document) string {
 	return title
 }
 
+func scrapeGameRequirements(d *goquery.Document) {
+	d.Find("div.game_area_sys_req[data-os]")
+}
+
 func scrapeGamePage(d *goquery.Document) game {
 	ID := d.Url.String()
 	game, ok := gameMap[ID]
 	if ok != true {
-		fmt.Println(ID)
-		panic("game not found!")
+		panic(fmt.Sprintf("game not found! %s", ID))
 	}
 	game.Categories = scrapeGameCategory(d)
 	game.Description = scrapeGameDescription(d)
+	game.DescriptionVerbose = scrapeGameDescriptionVerbose(d)
 	game.Developer = scrapeGameDevelopers(d)
 	game.Languages = scrapeGameLanguages(d)
 	game.Meta = scrapeGameMeta(d)
