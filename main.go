@@ -407,7 +407,7 @@ func netrunnerStoreCategories(URL string) {
 	})
 }
 
-func fGamePrintln(w *tabwriter.Writer, game game) {
+func fPrintlnGame(w *tabwriter.Writer, game game) {
 	s := reflect.ValueOf(&game).Elem()
 	typeOfT := s.Type()
 
@@ -416,6 +416,19 @@ func fGamePrintln(w *tabwriter.Writer, game game) {
 		fmt.Fprintln(w, fmt.Sprintf("%s\t|%v", typeOfT.Field(i).Name, f.Interface()))
 	}
 	//"%d: %s %s = %v\n", i, typeOfT.Field(i).Name, f.Type(), f.Interface()
+}
+
+func fPrintlnStoreFilter(w *tabwriter.Writer, m map[string]map[string]string) {
+	var i int
+	for tag := range m {
+		fmt.Fprintln(w, fmt.Sprintf("%v\t|%s", i, strings.ToUpper(tag)))
+		i = i + 1
+		fmt.Println("")
+		for loc := range m[tag] {
+			fmt.Println(fmt.Sprintf("\t|%s", loc))
+		}
+		//fmt.Println(strings.Repeat("-", sY))
+	}
 }
 
 func main() {
@@ -433,7 +446,11 @@ func main() {
 	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tcollecting %d pages", n))
 	client = (&http.Client{Timeout: (time.Second * 1)})
 	netrunnerStoreCategories(steamSearchURL)
-	fmt.Println(filterMap)
+	w := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
+	fPrintlnStoreFilter(w, filterMap)
+	if err := w.Flush(); err != nil {
+		panic(err)
+	}
 	c := make(chan string, n)
 	hrefGroup = []string{}
 	for i := 1; i < n+1; i++ {
@@ -453,10 +470,12 @@ func main() {
 	wg.Wait()
 	close(c)
 	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tbuilt %d games", len(gameMap)))
-	w := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
+	w = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 	for _, game := range gameMap {
-		fGamePrintln(w, game)
+		fPrintlnGame(w, game)
 		fmt.Fprintln(w, "")
 	}
-	w.Flush()
+	if err := w.Flush(); err != nil {
+		panic(err)
+	}
 }
