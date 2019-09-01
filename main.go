@@ -18,26 +18,26 @@ import (
 )
 
 type game struct {
-	AppID              string
-	BundleID           string
-	Categories         []gameCategory
-	CrtrID             string
-	DescriptionID      string
-	Description        string
-	DescriptionVerbose string
-	Developer          []gameDeveloper
-	Genre              []gameGenre
-	Languages          []gameLanguage
-	Meta               []gameMeta
-	Name               string
-	PackageID          string
-	Publisher          []gamePublisher
-	ReleaseDate        string
-	Requirements       []gameRequirement
-	TagID              string
-	Tags               []string
-	Title              string
-	URL                string
+	AppID              string            `json:"appid"`
+	BundleID           string            `json:"bundleid"`
+	Categories         []gameCategory    `json:"categories"`
+	CrtrID             string            `json:"crtrid"`
+	DescriptionID      string            `json:"descriptionid"`
+	Description        string            `json:"description"`
+	DescriptionVerbose string            `json:"descriptionverbose"`
+	Developer          []gameDeveloper   `json:"developer"`
+	Genre              []gameGenre       `json:"genre"`
+	Languages          []gameLanguage    `json:"languages"`
+	Meta               []gameMeta        `json:"meta"`
+	Name               string            `json:"name"`
+	PackageID          string            `json:"packageid"`
+	Publisher          []gamePublisher   `json:"publisher"`
+	ReleaseDate        string            `json:"releasedate"`
+	Requirements       []gameRequirement `json:"requirements"`
+	TagID              string            `json:"tagid"`
+	Tags               []string          `json:"tags"`
+	Title              string            `json:"title"`
+	URL                string            `json:"url"`
 }
 
 type gameCategory struct {
@@ -86,6 +86,10 @@ type gameRequirement struct {
 }
 
 const steamSearchURL string = "https://store.steampowered.com/search/"
+
+var filterMap map[string]map[string]string
+
+var optionMap map[string]string
 
 var gameMap map[string]game
 
@@ -314,6 +318,31 @@ func scrapePageItem(s *goquery.Selection) game {
 	return game
 }
 
+func scrapeStoreCategories(s *goquery.Selection) {
+	tag, ok := s.Attr("data-param")
+	if ok != true {
+		return
+	}
+	if _, ok := filterMap[tag]; !ok {
+		filterMap[tag] = map[string]string{}
+	}
+	value, ok := s.Attr("data-value")
+	if ok != true {
+		return
+	}
+	loc, ok := s.Attr("data-loc")
+	if ok != true {
+		return
+	}
+	filter, ok := filterMap[tag]
+	if ok != true {
+		panic(fmt.Sprintf("tag: %s", tag))
+	}
+	filter[loc] = value
+	filterMap[tag] = filter
+	optionMap[loc] = tag
+}
+
 func netrunnerGamePages(c chan string) {
 	defer wg.Done()
 	req, err := http.NewRequest(http.MethodGet, <-c, nil)
@@ -357,6 +386,27 @@ func netrunnerStorePages(c chan string) {
 	})
 }
 
+func netrunnerStoreCategories(URL string) {
+	req, err := http.NewRequest(http.MethodGet, URL, nil)
+	if err != nil {
+		return
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	if res.StatusCode != http.StatusOK {
+		return
+	}
+	doc, err := goquery.NewDocumentFromResponse(res)
+	if err != nil {
+		return
+	}
+	doc.Find("#additional_search_options div.tab_filter_control").Each(func(i int, s *goquery.Selection) {
+		scrapeStoreCategories(s)
+	})
+}
+
 func fGamePrintln(w *tabwriter.Writer, game game) {
 	s := reflect.ValueOf(&game).Elem()
 	typeOfT := s.Type()
@@ -369,7 +419,9 @@ func fGamePrintln(w *tabwriter.Writer, game game) {
 }
 
 func main() {
-	gameMap = make(map[string]game)
+	filterMap = map[string]map[string]string{}
+	optionMap = map[string]string{}
+	gameMap = map[string]game{}
 	scanner = bufio.NewScanner(os.Stdin)
 	if ok := scanner.Scan(); !ok {
 		return
@@ -380,6 +432,8 @@ func main() {
 	}
 	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tcollecting %d pages", n))
 	client = (&http.Client{Timeout: (time.Second * 1)})
+	netrunnerStoreCategories(steamSearchURL)
+	fmt.Println(filterMap)
 	c := make(chan string, n)
 	hrefGroup = []string{}
 	for i := 1; i < n+1; i++ {
