@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,6 +17,70 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+type gameCatalogue map[string]game
+
+func (gameCatalogue gameCatalogue) Add(game game) bool {
+	gameCatalogue[game.URL] = game
+	return gameCatalogue.Has(game.URL)
+}
+
+func (gameCatalogue gameCatalogue) Get(key string) (game, bool) {
+	game, ok := gameCatalogue[key]
+	return game, ok
+}
+
+func (gameCatalogue gameCatalogue) Has(key string) bool {
+	_, ok := gameCatalogue.Get(key)
+	return ok
+}
+
+type queryMap map[string]string
+
+func (queryMap queryMap) Add(key, value string) bool {
+	queryMap[key] = value
+	return queryMap.Has(key)
+}
+
+func (queryMap queryMap) Get(key string) (string, bool) {
+	value, ok := queryMap[key]
+	return value, ok
+}
+
+func (queryMap queryMap) Has(key string) bool {
+	_, ok := queryMap.Get(key)
+	return ok
+}
+
+type queryCategories map[string]queryMap
+
+func (queryCategories queryCategories) Add(tag, key, value string) bool {
+	if ok := queryCategories.Has(tag); ok != true {
+		queryCategories.Set(tag)
+	}
+	queryMap, _ := queryCategories.Get(tag)
+	queryMap.Add(key, value)
+	queryCategories[tag] = queryMap
+	return queryCategories.Has(tag)
+}
+
+func (queryCategories queryCategories) Get(tag string) (queryMap, bool) {
+	queryMap, ok := queryCategories[tag]
+	return queryMap, ok
+}
+
+func (queryCategories queryCategories) Has(tag string) bool {
+	_, ok := queryCategories[tag]
+	return ok
+}
+
+func (queryCategories queryCategories) Set(tag string) bool {
+	_, ok := queryCategories[tag]
+	if ok != true {
+		queryCategories[tag] = queryMap{}
+	}
+	return (ok == false)
+}
 
 type game struct {
 	AppID              string            `json:"appid"`
@@ -41,36 +106,52 @@ type game struct {
 }
 
 type gameCategory struct {
-	Name string
-	URL  string
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+func (gameCategory gameCategory) String() string {
+	return fmt.Sprintf("%s", gameCategory.Name)
 }
 
 type gameDeveloper struct {
-	Name string
-	URL  string
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+func (gameDeveloper gameDeveloper) String() string {
+	return fmt.Sprintf("%s", gameDeveloper.Name)
 }
 
 type gameGenre struct {
-	Name string
-	URL  string
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+func (gameGenre gameGenre) String() string {
+	return fmt.Sprintf("%s", gameGenre.Name)
 }
 
 type gameLanguage struct {
-	Audio     bool
-	Interface bool
-	Name      string
-	Subtitles bool
+	Audio     bool   `json:"audio"`
+	Interface bool   `json:"interface"`
+	Name      string `json:"name"`
+	Subtitles bool   `json:"subtitles"`
 }
 
 type gameMeta struct {
-	Content  string
-	Name     string
-	Property string
+	Content  string `json:"content"`
+	Name     string `json:"name"`
+	Property string `json:"property"`
 }
 
 type gamePublisher struct {
-	Name string
-	URL  string
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+func (gamePublisher gamePublisher) String() string {
+	return fmt.Sprintf("%s", gamePublisher.Name)
 }
 
 type gameRequirement struct {
@@ -87,19 +168,25 @@ type gameRequirement struct {
 
 const steamSearchURL string = "https://store.steampowered.com/search/"
 
-var filterMap map[string]map[string]string
-
-var optionMap map[string]string
-
-var gameMap map[string]game
-
 var hrefGroup []string
 
-var client *http.Client
-
-var scanner *bufio.Scanner
-
 var wg sync.WaitGroup
+
+var filterMap queryCategories = queryCategories{}
+
+var queryMapReverse queryMap = queryMap{}
+
+var gameMap gameCatalogue = gameCatalogue{}
+
+var client *http.Client = (&http.Client{Timeout: (time.Second * 1)})
+
+var scanner *bufio.Scanner = bufio.NewScanner(os.Stdin)
+
+var regexpFilterNonAlphaNumeric *regexp.Regexp = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+
+var regexpFilterWhitespace *regexp.Regexp = regexp.MustCompile(`\s{2,}`)
+
+//var flagVerboseBool *bool = flag.Bool("verbose", false, "-v")
 
 func scrapeGameCategory(d *goquery.Document) []gameCategory {
 	a := d.Find("div.game_area_details_specs a.name")
@@ -241,7 +328,7 @@ func scrapeGameRequirements(d *goquery.Document) []gameRequirement {
 
 func scrapeGamePage(d *goquery.Document) game {
 	ID := d.Url.String()
-	game, ok := gameMap[ID]
+	game, ok := gameMap.Get(ID)
 	if ok != true {
 		panic(fmt.Sprintf("game not found! %s", ID))
 	}
@@ -257,7 +344,9 @@ func scrapeGamePage(d *goquery.Document) game {
 	game.Requirements = scrapeGameRequirements(d)
 	game.Title = scrapeGameTitle(d)
 	game.Tags = scrapeGameTags(d)
-	gameMap[ID] = game
+	if ok := gameMap.Add(game); ok != true {
+		panic(fmt.Sprintf("game not added to map! %s", ID))
+	}
 	return game
 }
 
@@ -323,24 +412,23 @@ func scrapeStoreCategories(s *goquery.Selection) {
 	if ok != true {
 		return
 	}
-	if _, ok := filterMap[tag]; !ok {
-		filterMap[tag] = map[string]string{}
+	if ok := strings.ToUpper(tag) == "HIDE"; ok {
+		return
 	}
 	value, ok := s.Attr("data-value")
 	if ok != true {
 		return
 	}
-	loc, ok := s.Attr("data-loc")
+	key, ok := s.Attr("data-loc")
 	if ok != true {
 		return
 	}
-	filter, ok := filterMap[tag]
-	if ok != true {
-		panic(fmt.Sprintf("tag: %s", tag))
+	if ok := filterMap.Add(tag, key, value); ok != true {
+		panic(fmt.Sprintf("filter map did not receive lookup keyset! %s", tag))
 	}
-	filter[loc] = value
-	filterMap[tag] = filter
-	optionMap[loc] = tag
+	if ok := queryMapReverse.Add(key, tag); ok != true {
+		panic(fmt.Sprintf("option map did not receive reverse lookup key! %s->%s", key, tag))
+	}
 }
 
 func netrunnerGamePages(c chan string) {
@@ -364,26 +452,31 @@ func netrunnerGamePages(c chan string) {
 	scrapeGamePage(doc)
 }
 
-func netrunnerStorePages(c chan string) {
+func netrunnerStorePages(c chan string) string {
 	defer wg.Done()
 	req, err := http.NewRequest(http.MethodGet, <-c, nil)
 	if err != nil {
-		return
+		return "ERR"
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return
+		return "ERR"
 	}
 	if res.StatusCode != http.StatusOK {
-		return
+		return "ERR"
 	}
 	doc, err := goquery.NewDocumentFromResponse(res)
 	if err != nil {
-		return
+		return "ERR"
 	}
-	doc.Find("a.search_result_row").Each(func(i int, s *goquery.Selection) {
+	a := doc.Find("a.search_result_row")
+	a.Each(func(i int, s *goquery.Selection) {
 		scrapePageItem(s)
 	})
+	if ok := a.Length() == 0; ok {
+		return "EMPTY"
+	}
+	return "OK"
 }
 
 func netrunnerStoreCategories(URL string) {
@@ -402,7 +495,8 @@ func netrunnerStoreCategories(URL string) {
 	if err != nil {
 		return
 	}
-	doc.Find("#additional_search_options div.tab_filter_control").Each(func(i int, s *goquery.Selection) {
+	s := doc.Find("#additional_search_options div.tab_filter_control")
+	s.Each(func(i int, s *goquery.Selection) {
 		scrapeStoreCategories(s)
 	})
 }
@@ -410,7 +504,6 @@ func netrunnerStoreCategories(URL string) {
 func fPrintlnGame(w *tabwriter.Writer, game game) {
 	s := reflect.ValueOf(&game).Elem()
 	typeOfT := s.Type()
-
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
 		fmt.Fprintln(w, fmt.Sprintf("%s\t|%v", typeOfT.Field(i).Name, f.Interface()))
@@ -418,24 +511,55 @@ func fPrintlnGame(w *tabwriter.Writer, game game) {
 	//"%d: %s %s = %v\n", i, typeOfT.Field(i).Name, f.Type(), f.Interface()
 }
 
-func fPrintlnStoreFilter(w *tabwriter.Writer, m map[string]map[string]string) {
+func fPrintlnStoreFilter(w *tabwriter.Writer, queryCategories queryCategories) {
 	var i int
-	for tag := range m {
-		fmt.Fprintln(w, fmt.Sprintf("%v\t|%s", i, strings.ToUpper(tag)))
-		i = i + 1
-		fmt.Println("")
-		for loc := range m[tag] {
-			fmt.Println(fmt.Sprintf("\t|%s", loc))
+	for tag := range queryCategories {
+		i = (i + 1)
+		fmt.Fprintln(w, fmt.Sprintf("%v %s", i, normalizeMapKey(tag)))
+		for key := range queryCategories[tag] {
+
+			fmt.Println(fmt.Sprintf("\t%s", normalizeMapKey(key)))
 		}
-		//fmt.Println(strings.Repeat("-", sY))
+		fmt.Println("")
+	}
+}
+
+func normalizeMapKey(key string) string {
+	key = strings.TrimSpace(key)
+	key = regexpFilterNonAlphaNumeric.ReplaceAllString(key, " ")
+	key = regexpFilterWhitespace.ReplaceAllString(key, " ")
+	key = strings.TrimSpace(key)
+	key = strings.ReplaceAll(strings.ToUpper(key), " ", "-")
+	return key
+}
+
+func parseUserSearchQueryInput(input string) {
+	for _, s := range regexp.MustCompile(`(\s|\,|\|)`).Split(input, -1) {
+		key := strings.TrimSpace(s)
+		key = strings.ToUpper(key)
+		_, ok := queryMapReverse.Get(key)
+		if ok != true {
+			fmt.Println(fmt.Sprintf("tag not found using hash %s", key))
+		}
 	}
 }
 
 func main() {
-	filterMap = map[string]map[string]string{}
-	optionMap = map[string]string{}
-	gameMap = map[string]game{}
-	scanner = bufio.NewScanner(os.Stdin)
+	flag.Parse()
+	netrunnerStoreCategories(steamSearchURL)
+	w := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
+	//if *flagVerboseBool != false {
+	fPrintlnStoreFilter(w, filterMap)
+	//}
+	fmt.Println("Steamer.exe\t>\tinput N filters for search")
+	if ok := scanner.Scan(); !ok {
+		return
+	}
+	categoryOptions := strings.TrimSpace(scanner.Text())
+
+	parseUserSearchQueryInput(categoryOptions)
+
+	fmt.Println("Steamer.exe\t>\tinput N pages to search")
 	if ok := scanner.Scan(); !ok {
 		return
 	}
@@ -444,10 +568,6 @@ func main() {
 		return
 	}
 	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tcollecting %d pages", n))
-	client = (&http.Client{Timeout: (time.Second * 1)})
-	netrunnerStoreCategories(steamSearchURL)
-	w := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fPrintlnStoreFilter(w, filterMap)
 	if err := w.Flush(); err != nil {
 		panic(err)
 	}
@@ -456,7 +576,15 @@ func main() {
 	for i := 1; i < n+1; i++ {
 		wg.Add(1)
 		c <- fmt.Sprintf("%s?page=%d", steamSearchURL, i)
-		netrunnerStorePages(c)
+		switch netrunnerStorePages(c) {
+		case "EMPTY":
+			fmt.Println(fmt.Sprintf("Steamer.exe\t>\tnothing more to process"))
+			break
+		case "ERR":
+			fmt.Println(fmt.Sprintf("Steamer.exe\t>\terr for %d", i))
+		case "OK":
+			fmt.Println(fmt.Sprintf("Steam.exe\t>\tpage %d is OK", i))
+		}
 	}
 	wg.Wait()
 	close(c)
