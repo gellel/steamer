@@ -52,6 +52,36 @@ func (queryMap queryMap) Has(key string) bool {
 	return ok
 }
 
+type queryMapURL map[string][]string
+
+func (queryMapURL queryMapURL) Add(tag, key string) bool {
+	if ok := queryMapURL.Has(tag); ok != true {
+		queryMapURL.Set(tag)
+	}
+	querySet, _ := queryMapURL.Get(tag)
+	querySet = append(querySet, key)
+	queryMapURL[tag] = querySet
+	return queryMapURL.Has(tag)
+}
+
+func (queryMapURL queryMapURL) Get(tag string) ([]string, bool) {
+	querySet, ok := queryMapURL[tag]
+	return querySet, ok
+}
+
+func (queryMapURL queryMapURL) Has(tag string) bool {
+	_, ok := queryMapURL[tag]
+	return ok
+}
+
+func (queryMapURL queryMapURL) Set(tag string) bool {
+	_, ok := queryMapURL[tag]
+	if ok != true {
+		queryMapURL[tag] = []string{}
+	}
+	return (ok == false)
+}
+
 type queryCategories map[string]queryMap
 
 func (queryCategories queryCategories) Add(tag, key, value string) bool {
@@ -426,7 +456,7 @@ func scrapeStoreCategories(s *goquery.Selection) {
 	if ok := filterMap.Add(tag, key, value); ok != true {
 		panic(fmt.Sprintf("filter map did not receive lookup keyset! %s", tag))
 	}
-	if ok := queryMapReverse.Add(key, tag); ok != true {
+	if ok := queryMapReverse.Add(normalizeMapKey(key), tag); ok != true {
 		panic(fmt.Sprintf("option map did not receive reverse lookup key! %s->%s", key, tag))
 	}
 }
@@ -535,11 +565,11 @@ func normalizeMapKey(key string) string {
 
 func parseUserSearchQueryInput(input string) {
 	for _, s := range regexp.MustCompile(`(\s|\,|\|)`).Split(input, -1) {
-		key := strings.TrimSpace(s)
-		key = strings.ToUpper(key)
-		_, ok := queryMapReverse.Get(key)
-		if ok != true {
-			fmt.Println(fmt.Sprintf("tag not found using hash %s", key))
+		key := strings.ToUpper(strings.TrimSpace(s))
+		if tag, ok := queryMapReverse.Get(key); ok {
+			if filters, ok := filterMap.Get(tag); ok {
+				fmt.Println(filters.Get(s))
+			}
 		}
 	}
 }
