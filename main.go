@@ -82,13 +82,24 @@ func (queryMapURL queryMapURL) Set(tag string) bool {
 	return (ok == false)
 }
 
+func (queryMapURL queryMapURL) URL() string {
+	var properties []string
+	for tag, querySet := range queryMapURL {
+		properties = append(properties, fmt.Sprintf("%s=%s", tag, strings.Join(querySet, "%2C")))
+	}
+	return strings.Join(properties, "&")
+}
+
 type queryCategories map[string]queryMap
 
 func (queryCategories queryCategories) Add(tag, key, value string) bool {
 	if ok := queryCategories.Has(tag); ok != true {
 		queryCategories.Set(tag)
 	}
-	queryMap, _ := queryCategories.Get(tag)
+	queryMap, ok := queryCategories.Get(tag)
+	if ok != true {
+		panic(fmt.Sprintf("cannot find %s", tag))
+	}
 	queryMap.Add(key, value)
 	queryCategories[tag] = queryMap
 	return queryCategories.Has(tag)
@@ -204,7 +215,9 @@ var wg sync.WaitGroup
 
 var filterMap queryCategories = queryCategories{}
 
-var queryMapReverse queryMap = queryMap{}
+var filterMapReverse queryMap = queryMap{}
+
+var searchQuerySet queryMapURL = queryMapURL{}
 
 var gameMap gameCatalogue = gameCatalogue{}
 
@@ -453,10 +466,10 @@ func scrapeStoreCategories(s *goquery.Selection) {
 	if ok != true {
 		return
 	}
-	if ok := filterMap.Add(tag, key, value); ok != true {
+	if ok := filterMap.Add(tag, normalizeMapKey(key), value); ok != true {
 		panic(fmt.Sprintf("filter map did not receive lookup keyset! %s", tag))
 	}
-	if ok := queryMapReverse.Add(normalizeMapKey(key), tag); ok != true {
+	if ok := filterMapReverse.Add(normalizeMapKey(key), tag); ok != true {
 		panic(fmt.Sprintf("option map did not receive reverse lookup key! %s->%s", key, tag))
 	}
 }
@@ -547,8 +560,7 @@ func fPrintlnStoreFilter(w *tabwriter.Writer, queryCategories queryCategories) {
 		i = (i + 1)
 		fmt.Fprintln(w, fmt.Sprintf("%v %s", i, normalizeMapKey(tag)))
 		for key := range queryCategories[tag] {
-
-			fmt.Println(fmt.Sprintf("\t%s", normalizeMapKey(key)))
+			fmt.Println(fmt.Sprintf("\t%s", key))
 		}
 		fmt.Println("")
 	}
@@ -565,10 +577,12 @@ func normalizeMapKey(key string) string {
 
 func parseUserSearchQueryInput(input string) {
 	for _, s := range regexp.MustCompile(`(\s|\,|\|)`).Split(input, -1) {
-		key := strings.ToUpper(strings.TrimSpace(s))
-		if tag, ok := queryMapReverse.Get(key); ok {
+		key := normalizeMapKey(s)
+		if tag, ok := filterMapReverse.Get(key); ok {
 			if filters, ok := filterMap.Get(tag); ok {
-				fmt.Println(filters.Get(s))
+				if value, ok := filters.Get(key); ok {
+					searchQuerySet.Add(tag, value)
+				}
 			}
 		}
 	}
@@ -589,6 +603,8 @@ func main() {
 
 	parseUserSearchQueryInput(categoryOptions)
 
+	fmt.Println(fmt.Sprintf("%s?%s", steamSearchURL, searchQuerySet.URL()))
+
 	fmt.Println("Steamer.exe\t>\tinput N pages to search")
 	if ok := scanner.Scan(); !ok {
 		return
@@ -605,7 +621,9 @@ func main() {
 	hrefGroup = []string{}
 	for i := 1; i < n+1; i++ {
 		wg.Add(1)
-		c <- fmt.Sprintf("%s?page=%d", steamSearchURL, i)
+		storePageURL := fmt.Sprintf("%s?%s&page=%d", steamSearchURL, searchQuerySet.URL(), i)
+		c <- storePageURL
+		fmt.Println(fmt.Sprintf("Steamer.exe\t>\taccessing %s", storePageURL))
 		switch netrunnerStorePages(c) {
 		case "EMPTY":
 			fmt.Println(fmt.Sprintf("Steamer.exe\t>\tnothing more to process"))
