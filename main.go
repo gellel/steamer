@@ -125,17 +125,6 @@ func (queryCategories queryCategories) Set(tag string) bool {
 	return (ok == false)
 }
 
-// GameDeveloper is a struct that expresses the individual or group that was responsible for creating the Steam game.
-type gameDeveloper struct {
-	Name  string `json:"name"`  // {Name: "ROCKSTAR-NORTH"}
-	Title string `json:"title"` // {Title: "Rockstar North"}
-	URL   string `json:"url"`   // {URL: "https://store.steampowered.com/developer/rockstarnorth"}
-}
-
-func (gameDeveloper gameDeveloper) String() string {
-	return fmt.Sprintf("%s", gameDeveloper.Name)
-}
-
 // GameGenre is a struct that expresses the individual genre of the Steam game. Unlike a GameCategory, a GameGenre
 // describes the unique qualities at a gameplay level that help distinguish one type of game from another.
 type gameGenre struct {
