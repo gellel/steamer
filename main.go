@@ -18,6 +18,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// GameCatalogue is a map-like struct that contains a collection of Game structs assigned by their Steam store page URL.
 type gameCatalogue map[string]game
 
 func (gameCatalogue gameCatalogue) Add(game game) bool {
@@ -34,7 +35,7 @@ func (gameCatalogue gameCatalogue) Has(key string) bool {
 	_, ok := gameCatalogue.Get(key)
 	return ok
 }
-
+	
 type queryMap map[string]string
 
 func (queryMap queryMap) Add(key, value string) bool {
@@ -123,61 +124,84 @@ func (queryCategories queryCategories) Set(tag string) bool {
 	return (ok == false)
 }
 
+// Game is a struct that expresses a video game that has been scraped from the Steam store. It
+// contains properties and attributes that aim to provide a snapshot of the game's current
+// state on the date it was collected. A Game is expected to be built by querying and
+// reducing HTML elements found across the Steam game page. As this data is generally
+// provided from a raw HTML document, and each field may have varying levels of artifacting.
+// Most artifacting has been handled by various string mutation operations but inconsistencies
+// may persist.
 type game struct {
-	AppID              string            `json:"appid"`
-	BundleID           string            `json:"bundleid"`
-	Categories         []gameCategory    `json:"categories"`
-	CrtrID             string            `json:"crtrid"`
-	DescriptionID      string            `json:"descriptionid"`
-	Description        string            `json:"description"`
-	DescriptionVerbose string            `json:"descriptionverbose"`
-	Developer          []gameDeveloper   `json:"developer"`
-	Genre              []gameGenre       `json:"genre"`
-	Languages          []gameLanguage    `json:"languages"`
-	Meta               []gameMeta        `json:"meta"`
-	Name               string            `json:"name"`
-	PackageID          string            `json:"packageid"`
-	Publisher          []gamePublisher   `json:"publisher"`
-	ReleaseDate        string            `json:"releasedate"`
-	Requirements       []gameRequirement `json:"requirements"`
-	TagID              string            `json:"tagid"`
-	Tags               []string          `json:"tags"`
-	Title              string            `json:"title"`
-	URL                string            `json:"url"`
+	AppID              string            `json:"appid"`              // {AppID: "306130"} OR {AppID: "NIL"} (NIL when BundleID)
+	BundleID           string            `json:"bundleid"`           // {BundleID: "NIL"} OR {BundleID: "11802"} (NIL when AppID)
+	Categories         []gameCategory    `json:"categories"`         // {Categories: [MMO Steam Trading Cards Partial Controller Support]}
+	CrtrID             []string          `json:"crtrid"`             // {CrtrID: "[33028765,35501445]"}
+	DescriptionID      []string          `json:"descriptionid"`      // {DescriptionID: "[2,5]"}
+	Description        string            `json:"description"`        // {Description: "...."}
+	DescriptionVerbose string            `json:"descriptionverbose"` // {DescriptionVerbose: "...."}
+	Developer          []gameDeveloper   `json:"developer"`          // {Developer: [Zenimax Online Studios]}
+	Genre              []gameGenre       `json:"genre"`              // {Genre: [Massively Multiplayer RPG]}
+	Languages          []gameLanguage    `json:"languages"`          // {Languages: [{English Audio true Interface true Subtitles true}]}
+	Meta               []gameMeta        `json:"meta"`               // {Meta: [...]}
+	Name               string            `json:"name"`               // {Name: "THE-ELDER-SCROLLS-ONLINE"}
+	PackageID          string            `json:"packageid"`          // {PackageID: "124923"}
+	Publisher          []gamePublisher   `json:"publisher"`          // {Publisher: [ZENIMAX-ONLINE-STUDIOS ...]}
+	ReleaseDate        string            `json:"releasedate"`        // {ReleaseDate: "4 Apr, 2014"}
+	Requirements       []gameRequirement `json:"requirements"`       // {Requirements: {DirectX: Version 11 Graphics: AMD Radeon RX 470 Memory: ...}]
+	TagID              []string          `json:"tagid"`              // {TagID: "[19,1685,3814,29482,122,3859,21]"}
+	Tags               []gameTag         `json:"tags"`               // {Tags: [Post-apocalyptic Difficult Survival Lovecraft ...]}
+	Title              string            `json:"title"`              // {Title: "The Elder Scrolls® Online"}
+	URL                string            `json:"url"`                // {URL: "https://store.steampowered.com/app/306130/The_Elder_Scrolls_Online/?snr=1_7_7_230_150_1"}
 }
 
+
+// GameCategory is a struct that expresses the individual attribute of the Steam game. Unlike a GameGenre, a GameCategory
+// describes the unique attributes at a feature level that help distinguish the options one game offers over another.
 type gameCategory struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name  string `json:"name"`  // {Name: "SINGLE-PLAYER"}
+	Title string `json:"title"` // {Title: "Single Player"}
+	URL   string `json:"url"`   // {URL: "https://store.steampowered.com/search/?category2=2"}
 }
 
 func (gameCategory gameCategory) String() string {
 	return fmt.Sprintf("%s", gameCategory.Name)
 }
 
+// GameDeveloper is a struct that expresses the individual or group that was responsible for creating the Steam game.
 type gameDeveloper struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name  string `json:"name"`  // {Name: "ROCKSTAR-NORTH"}
+	Title string `json:"title"` // {Title: "Rockstar North"}
+	URL   string `json:"url"`   // {URL: "https://store.steampowered.com/developer/rockstarnorth"}
 }
 
 func (gameDeveloper gameDeveloper) String() string {
 	return fmt.Sprintf("%s", gameDeveloper.Name)
 }
 
+// GameGenre is a struct that expresses the individual genre of the Steam game. Unlike a GameCategory, a GameGenre
+// describes the unique qualities at a gameplay level that help distinguish one type of game from another.
 type gameGenre struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name  string `json:"name"`  // {Name: "FIRST-PERSON-SHOOTER"}
+	Title string `json:"title"` // {Name: "First Person Shooter"}
+	URL   string `json:"url"`   // {URL: "https://store.steampowered.com/tags/en/Action"}
 }
 
 func (gameGenre gameGenre) String() string {
 	return fmt.Sprintf("%s", gameGenre.Name)
 }
 
+// GameLanguage is a struct that expresses the provided language support for a Steam game. Audio represents whether the game's
+// languages provides full audio translation for that language. Interface represents the whether the game's user interface
+// has the current language supported. Subtitles is whether the game has subtitle support for foreign audio.
 type gameLanguage struct {
-	Audio     bool   `json:"audio"`
-	Interface bool   `json:"interface"`
-	Name      string `json:"name"`
-	Subtitles bool   `json:"subtitles"`
+	Audio     bool   `json:"audio"`     // {Audio: true}
+	Interface bool   `json:"interface"` // {Interface: true}
+	Name      string `json:"name"`      // {Name: "ENGLISH"}
+	Subtitles bool   `json:"subtitles"` // {Subtitles: true}
+}
+
+func (gameLanguage gameLanguage) String() string {
+	return fmt.Sprintf("{%s Audio %t Interface %t Subtitles %t}", gameLanguage.Name, gameLanguage.Audio, gameLanguage.Interface, gameLanguage.Subtitles)
 }
 
 type gameMeta struct {
@@ -186,15 +210,23 @@ type gameMeta struct {
 	Property string `json:"property"`
 }
 
+// GamePublisher is a struct that expresses the individual or group that was responsible for publishing the Steam game.
 type gamePublisher struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name  string `json:"name"`  // {Name: "ROCKSTAR-GAMES"}
+	Title string `json:"title"` // {Title: "Rockstar Games"}
+	URL   string `json:"url"`   // {URL: "https://store.steampowered.com/publisher/rockstargames"}
 }
 
 func (gamePublisher gamePublisher) String() string {
 	return fmt.Sprintf("%s", gamePublisher.Name)
 }
 
+func (gamePublisher gamePublisher) String() string {
+	return fmt.Sprintf("%s", gamePublisher.Name)
+}
+
+// GameRequirement expresses the benchmark that the Steam game should meet for performance metrics.
+// A GameRequirement can express either a minimum or recommended specification.
 type gameRequirement struct {
 	DirectX   string `json:"directx"`
 	Graphics  string `json:"graphics"`
@@ -207,7 +239,26 @@ type gameRequirement struct {
 	Storage   string `json:"storage"`
 }
 
-const steamSearchURL string = "https://store.steampowered.com/search/"
+// user-defined tags
+type gameTag struct {
+	Name  string `json:"name"`  // {Name: "CHOICES-MATTER"}
+	Title string `json:"title"` // {Name: "Choices Matter"}
+	URL   string `json:"url"`   // {URL: "https://store.steampowered.com/tags/en/Choices%20Matter/?snr=1_5_9__409"}
+}
+
+const cookieBirthTime string = "birthtime=-949485599"
+
+const cookieLastAgeCheckAge string = "lastagecheckage=1-0-1900"
+
+const cookieWantsMatureContent string = "wants_mature_content=1"
+
+const steamStoreURL string = "https://store.steampowered.com"
+
+const steamSearchURL string = steamStoreURL + "/search/"
+
+const steamPublisherURL string = steamStoreURL + "/publisher/"
+
+const steamGamePageCookie string = (cookieBirthTime + ";" + cookieLastAgeCheckAge + ";" + cookieWantsMatureContent + ";")
 
 var hrefGroup []string
 
@@ -235,9 +286,11 @@ func scrapeGameCategory(d *goquery.Document) []gameCategory {
 	a := d.Find("div.game_area_details_specs a.name")
 	gameCategories := make([]gameCategory, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
+		t := s.Text()
 		gameCategories[i] = gameCategory{
-			Name: strings.TrimSpace(s.Text()),
-			URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+			Name:  normalizeMapKey(t),
+			Title: strings.TrimSpace(t),
+			URL:   strings.TrimSpace(s.AttrOr("href", "NIL"))}
 	})
 	return gameCategories
 }
@@ -261,9 +314,11 @@ func scrapeGameDevelopers(d *goquery.Document) []gameDeveloper {
 	a := d.Find("#developers_list a")
 	gameDevelopers := make([]gameDeveloper, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
+		t := s.Text()
 		gameDevelopers[i] = gameDeveloper{
-			Name: strings.TrimSpace(s.Text()),
-			URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+			Name:  normalizeMapKey(t),
+			Title: strings.TrimSpace(t),
+			URL:   strings.TrimSpace(s.AttrOr("href", "NIL"))}
 	})
 	return gameDevelopers
 }
@@ -272,9 +327,11 @@ func scrapeGameGenre(d *goquery.Document) []gameGenre {
 	a := d.Find("div.game_details div.details_block:first-child > a")
 	gameGenres := make([]gameGenre, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
+		t := s.Text()
 		gameGenres[i] = gameGenre{
-			Name: strings.TrimSpace(s.Text()),
-			URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+			Name:  normalizeMapKey(t),
+			Title: strings.TrimSpace(t),
+			URL:   strings.TrimSpace(s.AttrOr("href", "NIL"))}
 	})
 	return gameGenres
 }
@@ -318,21 +375,29 @@ func scrapeGameMeta(d *goquery.Document) []gameMeta {
 }
 
 func scrapeGamePublisher(d *goquery.Document) []gamePublisher {
-	a := d.Find("div.dev_row > b:first-child + a")
+	a := d.Find("div.game_details div.dev_row a").FilterFunction(func(i int, s *goquery.Selection) bool {
+		return strings.HasPrefix(s.AttrOr("href", ""), (steamPublisherURL))
+	})
 	gamePublishers := make([]gamePublisher, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
+		t := s.Text()
 		gamePublishers[i] = gamePublisher{
-			Name: strings.TrimSpace(s.Text()),
-			URL:  s.AttrOr("href", "NIL")}
+			Name:  normalizeMapKey(t),
+			Title: strings.TrimSpace(t),
+			URL:   s.AttrOr("href", "NIL")}
 	})
 	return gamePublishers
 }
 
-func scrapeGameTags(d *goquery.Document) []string {
+func scrapeGameTags(d *goquery.Document) []gameTag {
 	a := d.Find("a.app_tag")
-	gameTags := make([]string, a.Length())
+	gameTags := make([]gameTag, a.Length())
 	a.Each(func(i int, s *goquery.Selection) {
-		gameTags[i] = strings.TrimSpace(s.Text())
+		t := s.Text()
+		gameTags[i] = gameTag{
+			Name:  normalizeMapKey(t),
+			Title: strings.TrimSpace(t),
+			URL:   s.AttrOr("href", "NIL")}
 	})
 	return gameTags
 }
@@ -411,14 +476,14 @@ func scrapePageItemBundleIDAttribute(s *goquery.Selection) string {
 	return ID
 }
 
-func scrapePageItemCrtrIDAttribute(s *goquery.Selection) string {
+func scrapePageItemCrtrIDAttribute(s *goquery.Selection) []string {
 	ID := strings.TrimSpace(s.AttrOr("data-ds-crtrids", "NIL"))
-	return ID
+	return strings.Split(ID, ",")
 }
 
-func scrapePageItemDescIDAttribute(s *goquery.Selection) string {
+func scrapePageItemDescIDAttribute(s *goquery.Selection) []string {
 	ID := strings.TrimSpace(s.AttrOr("data-ds-descids", "NIL"))
-	return ID
+	return strings.Split(ID, ",")
 }
 
 func scrapePageItemPackageIDAttribute(s *goquery.Selection) string {
@@ -426,14 +491,14 @@ func scrapePageItemPackageIDAttribute(s *goquery.Selection) string {
 	return ID
 }
 
-func scrapePageItemTagIDAttribute(s *goquery.Selection) string {
+func scrapePageItemTagIDAttribute(s *goquery.Selection) []string {
 	ID := strings.TrimSpace(s.AttrOr("data-ds-tagids", "NIL"))
-	return ID
+	return strings.Split(ID, ",")
 }
 
 func scrapePageItemTitle(s *goquery.Selection) string {
 	title := strings.TrimSpace(s.Find("div.search_name span.title").Text())
-	return title
+	return normalizeMapKey(title)
 }
 
 func scrapePageItem(s *goquery.Selection) game {
@@ -480,7 +545,7 @@ func netrunnerGamePages(c chan string) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("Cookie", "birthtime=-949485599; lastagecheckage=1-0-1900; wants_mature_content=1")
+	req.Header.Set("Cookie", steamGamePageCookie)
 	res, err := client.Do(req)
 	if err != nil {
 		return
@@ -588,6 +653,23 @@ func parseUserSearchQueryInput(input string) {
 	}
 }
 
+func getUserFilters() error {
+	return nil
+}
+
+func getUserPageOffset() (int, error) {
+	var n int
+	fmt.Println("Steamer.exe\t| PLEASE ENTER PAGE NUMBER TO BEGIN SCRAPING FROM:")
+	if ok := scanner.Scan(); ok != true {
+		return n, errors.New("user did not provide input")
+	}
+	n, err := strconv.Atoi(scanner.Text())
+	if err != nil {
+		return n, err
+	}
+	return n, err
+}
+
 func main() {
 	flag.Parse()
 	netrunnerStoreCategories(steamSearchURL)
@@ -605,14 +687,12 @@ func main() {
 
 	fmt.Println(fmt.Sprintf("%s?%s", steamSearchURL, searchQuerySet.URL()))
 
-	fmt.Println("Steamer.exe\t>\tinput N pages to search")
-	if ok := scanner.Scan(); !ok {
-		return
-	}
-	n, err := strconv.Atoi(scanner.Text())
+	n, err := getUserPageOffset()
+
 	if err != nil {
-		return
+		panic(err)
 	}
+
 	fmt.Println(fmt.Sprintf("Steamer.exe\t>\tcollecting %d pages", n))
 	if err := w.Flush(); err != nil {
 		panic(err)
@@ -655,3 +735,4 @@ func main() {
 		panic(err)
 	}
 }
+
