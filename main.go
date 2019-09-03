@@ -231,6 +231,14 @@ func scrapeGamePage(d *goquery.Document) game {
 	return game
 }
 
+func scrapeGameReviewsAll(d *goquery.Document) {
+	d.Find(".user_reviews_summary_row[itemprop]")
+}
+
+func scrapeGameReviewsRecent(d *goquery.Document) {
+	d.Find(".user_reviews_summary_row:not([itemprop])")
+}
+
 func scrapePageItemHrefAttribute(s *goquery.Selection) string {
 	href, exists := s.Attr("href")
 	if exists == true {
