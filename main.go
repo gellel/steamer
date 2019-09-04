@@ -223,6 +223,8 @@ func scrapeGamePage(d *goquery.Document) game {
 	game.Publisher = scrapeGamePublisher(d)
 	game.ReleaseDate = scrapeGameDate(d)
 	game.Requirements = scrapeGameRequirements(d)
+	game.ReviewsAll = scrapeGameReviewsAll(d)
+	game.ReviewsRecent = scrapeGameReviewsRecent(d)
 	game.Title = scrapeGameTitle(d)
 	game.Tags = scrapeGameTags(d)
 	if ok := gameMap.Add(game); ok != true {
@@ -231,12 +233,72 @@ func scrapeGamePage(d *goquery.Document) game {
 	return game
 }
 
-func scrapeGameReviewsAll(d *goquery.Document) {
-	d.Find(".user_reviews_summary_row[itemprop]")
+func scrapeGameReviewsAll(d *goquery.Document) gameAggregateReview {
+	gameAggregateReview := gameAggregateReview{
+		Title: "REVIEWS-ALL"}
+	s := d.Find(".user_reviews_summary_row[itemprop]")
+	s.Each(func(i int, s *goquery.Selection) {
+		s.Find("span.game_review_summary").First().Each(func(i int, s *goquery.Selection) {
+			gameAggregateReview.Sentiment = normalizeMapKey(s.Text())
+		})
+		s.Find("span.responsive_hidden").First().Each(func(i int, s *goquery.Selection) {
+			t := regexpFilterNonNumeric.ReplaceAllString(s.Text(), "")
+			if len(t) == 0 {
+				panic(errors.New("cannot find review count"))
+			}
+			n, err := strconv.Atoi(t)
+			if err != nil {
+				panic(errors.New("cannot parse review count"))
+			}
+			gameAggregateReview.Count = n
+		})
+		s.Find("span.nonresponsive_hidden").First().Each(func(i int, s *goquery.Selection) {
+			t := regexpFindPercentage.FindString(strings.TrimSpace(s.Text()))
+			if len(t) == 0 {
+				panic(errors.New("cannot find percentage count"))
+			}
+			n, err := strconv.Atoi(regexpFilterNonNumeric.ReplaceAllString(t, ""))
+			if err != nil {
+				panic(errors.New("cannot parse percentage count"))
+			}
+			gameAggregateReview.Percentage = n
+		})
+	})
+	return gameAggregateReview
 }
 
-func scrapeGameReviewsRecent(d *goquery.Document) {
-	d.Find(".user_reviews_summary_row:not([itemprop])")
+func scrapeGameReviewsRecent(d *goquery.Document) gameAggregateReview {
+	gameAggregateReview := gameAggregateReview{
+		Title: "REVIEWS-RECENT"}
+	s := d.Find(".user_reviews_summary_row:not([itemprop])")
+	s.Each(func(i int, s *goquery.Selection) {
+		s.Find("span.game_review_summary").First().Each(func(i int, s *goquery.Selection) {
+			gameAggregateReview.Sentiment = normalizeMapKey(s.Text())
+		})
+		s.Find("span.responsive_hidden").First().Each(func(i int, s *goquery.Selection) {
+			t := regexpFilterNonNumeric.ReplaceAllString(s.Text(), "")
+			if len(t) == 0 {
+				panic(errors.New("cannot find review count"))
+			}
+			n, err := strconv.Atoi(t)
+			if err != nil {
+				panic(errors.New("cannot parse review count"))
+			}
+			gameAggregateReview.Count = n
+		})
+		s.Find("span.nonresponsive_hidden").First().Each(func(i int, s *goquery.Selection) {
+			t := regexpFindPercentage.FindString(strings.TrimSpace(s.Text()))
+			if len(t) == 0 {
+				panic(errors.New("cannot find percentage count"))
+			}
+			n, err := strconv.Atoi(regexpFilterNonNumeric.ReplaceAllString(t, ""))
+			if err != nil {
+				panic(errors.New("cannot parse percentage count"))
+			}
+			gameAggregateReview.Percentage = n
+		})
+	})
+	return gameAggregateReview
 }
 
 func scrapePageItemHrefAttribute(s *goquery.Selection) string {
