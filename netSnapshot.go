@@ -5,11 +5,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 type netSnapshot struct {
+	doc          *goquery.Document
 	req          *http.Request
 	res          *http.Response
+	ErrDoc       error         `json:"err_document"`
 	ErrRes       error         `json:"err_response"`
 	ErrReq       error         `json:"err_request"`
 	Method       string        `json:"method"`
@@ -23,7 +27,7 @@ type netSnapshot struct {
 	URL          string        `json:"URL"`
 }
 
-func getNetSnapshot(c chan *netSnapshot, r *http.Client, m, URL string) {
+func newNetSnapshot(c chan *netSnapshot, r *http.Client, m, URL string) {
 	defer wg.Done()
 	if ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://")); !ok {
 		URL = fmt.Sprintf("https://%s", URL)
@@ -48,9 +52,12 @@ func getNetSnapshot(c chan *netSnapshot, r *http.Client, m, URL string) {
 		status = res.Status
 		statusCode = res.StatusCode
 	}
+	doc, err := goquery.NewDocumentFromResponse(res)
 	c <- &netSnapshot{
+		doc:          doc,
 		req:          req,
 		res:          res,
+		ErrDoc:       err,
 		ErrReq:       errReq,
 		ErrRes:       errRes,
 		Method:       m,
