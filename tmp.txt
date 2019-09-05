@@ -247,3 +247,686 @@ func main() {
 	})
 	writer.Flush()
 }
+
+---------------------
+
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"os/user"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+var wg sync.WaitGroup
+
+func requestSteamGame(c chan *Snapshot, client *http.Client, URL string) {
+	wg.Add(1)
+	go chanSnapshot(c, client, http.MethodGet, URL)
+	steamGameSnapshot := <-c
+	if steamGameSnapshot.StatusCode != http.StatusOK {
+		return
+	}
+	if steamGameSnapshot.document == nil {
+		return
+	}
+	s := steamGameSnapshot.document.Find("html")
+	steamPageResult := NewSteamPageResult(s)
+
+	_ = steamPageResult
+
+}
+
+func requestSteamPage(c chan *Snapshot, client *http.Client, URL string) {
+	wg.Add(1)
+	go chanSnapshot(c, client, http.MethodGet, URL)
+	steamPageSnapshot := <-c
+	if steamPageSnapshot.StatusCode != http.StatusOK {
+		return
+	}
+	if steamPageSnapshot.document == nil {
+		return
+	}
+	s := steamPageSnapshot.document.Find("a.search_result_row[href]")
+	steamGameSnapshotChan := make(chan *Snapshot)
+	s.Each(func(i int, s *goquery.Selection) {
+		steamSearchResult := NewSteamSearchResult(s)
+		if steamPageSnapshot.URL == "NIL" {
+			return
+		}
+		user, err := user.Current()
+		if err != nil {
+			return
+		}
+		fullpath := filepath.Join(user.HomeDir, "steambot", fmt.Sprintf("%s", steamSearchResult.Name))
+		fmt.Println(fmt.Sprintf("%q", fullpath))
+		err = writeSteamSearchResult(fullpath, steamSearchResult)
+		if err != nil {
+			panic(err)
+		}
+		requestSteamGame(steamGameSnapshotChan, client, steamSearchResult.URL)
+	})
+}
+
+func main() {
+	client := &http.Client{Timeout: time.Second * 10}
+
+	steamPageSnapshotChan := make(chan *Snapshot)
+	for i := 1; i < 3; i++ {
+		requestSteamPage(steamPageSnapshotChan, client, fmt.Sprintf("store.steampowered.com/search/?page=%d", i))
+	}
+	wg.Wait()
+}
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"os/user"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type Snapshot struct {
+	document     *goquery.Document
+	request      *http.Request
+	response     *http.Response
+	ErrDoc       error         `json:"err_document"`
+	ErrRes       error         `json:"err_response"`
+	ErrReq       error         `json:"err_request"`
+	Method       string        `json:"method"`
+	RequestOK    bool          `json:"request_OK"`
+	ResponseOK   bool          `json:"response_OK"`
+	Status       string        `json:"status"`
+	StatusCode   int           `json:"status_code"`
+	TimeDuration time.Duration `json:"time_duration"`
+	TimeEnd      time.Time     `json:"time_end"`
+	TimeStart    time.Time     `json:"time_start"`
+	URL          string        `json:"URL"`
+}
+
+func NewSnapshot(HTTPMethod, URL string, req *http.Request, errReq error, res *http.Response, errRes error, timeStart, timeEnd time.Time) *Snapshot {
+	if errReq != nil {
+		timeStart = time.Time{}
+	}
+	if errRes != nil {
+		timeEnd = time.Time{}
+	}
+	timeDuration := timeEnd.Sub(timeStart)
+	if (errReq != nil) && (errRes != nil) {
+		timeDuration = 0
+	}
+	var status string
+	var statusCode int
+	if res != nil {
+		status = res.Status
+		statusCode = res.StatusCode
+	}
+	doc, err := goquery.NewDocumentFromResponse(res)
+	return &Snapshot{
+		document:     doc,
+		request:      req,
+		response:     res,
+		ErrDoc:       err,
+		ErrReq:       errReq,
+		ErrRes:       errRes,
+		Method:       HTTPMethod,
+		RequestOK:    (errReq == nil),
+		ResponseOK:   (errRes == nil),
+		Status:       status,
+		StatusCode:   statusCode,
+		TimeDuration: timeDuration,
+		TimeEnd:      timeEnd,
+		TimeStart:    timeStart,
+		URL:          URL}
+}
+
+func chanSnapshot(c chan *Snapshot, r *http.Client, HTTPMethod, URL string) {
+	defer wg.Done()
+	ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://"))
+	if ok != true {
+		URL = fmt.Sprintf("https://%s", URL)
+	}
+	req, errReq := http.NewRequest(HTTPMethod, URL, nil)
+	timeStart := time.Now()
+	res, errRes := r.Do(req)
+	timeEnd := time.Now()
+	snapshot := NewSnapshot(HTTPMethod, URL, req, errReq, res, errRes, timeStart, timeEnd)
+	user, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", snapshot.request.URL.Host)
+	err = writeSnapshot(fullpath, snapshot)
+	if err != nil {
+		panic(err)
+	}
+	c <- snapshot
+}
+
+func writeSnapshot(fullpath string, s *Snapshot) error {
+	err := os.MkdirAll(fullpath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	replacer := strings.NewReplacer("https://", "", "/", "", "\\", "")
+	filename := replacer.Replace(fmt.Sprintf("%s.json", s.request.URL.String()))
+	fullname := filepath.Join(fullpath, filename)
+	err = ioutil.WriteFile(fullname, b, os.ModePerm)
+	return err
+}
+
+package main
+
+import (
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameAggregateReview struct {
+	Count      int    `json:"count"`
+	Percentage int    `json:"percentage"`
+	Sentiment  string `json:"sentiment"`
+}
+
+func NewSteamPageGameAggregateReview(s *goquery.Selection) SteamPageGameAggregateReview {
+	var (
+		count      int
+		sentiment  string
+		percentage int
+	)
+	s.First().Each(func(i int, s *goquery.Selection) {
+		s.Find("span.game_review_summary").First().Each(func(i int, s *goquery.Selection) {
+			sentiment = strings.TrimSpace(s.Text())
+		})
+		s.Find("span.responsive_hidden").First().Each(func(i int, s *goquery.Selection) {
+			substring := regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(s.Text(), "")
+			n, err := strconv.Atoi(substring)
+			if err != nil {
+				return
+			}
+			count = n
+		})
+		s.Find("span.nonresponsive_hidden").First().Each(func(i int, s *goquery.Selection) {
+			substring := regexp.MustCompile(`\s(\d+%)`).FindString(s.Text())
+			substring = regexp.MustCompile(`[^0-9]`).ReplaceAllString(substring, "")
+			n, err := strconv.Atoi(substring)
+			if err != nil {
+				return
+			}
+			percentage = n
+		})
+	})
+	return SteamPageGameAggregateReview{
+		Count:      count,
+		Sentiment:  sentiment,
+		Percentage: percentage}
+}
+
+package main
+
+import (
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameCategory struct {
+	Name string `json:"name"`
+	URL  string `json:"URL"`
+}
+
+func NewSteamPageGameCategory(s *goquery.Selection) SteamPageGameCategory {
+	return SteamPageGameCategory{
+		Name: strings.TrimSpace(s.Text()),
+		URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+}
+
+package main
+
+import (
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameDeveloper struct {
+	Name string `json:"name"`
+	URL  string `json:"URL"`
+}
+
+func NewSteamPageGameDeveloper(s *goquery.Selection) SteamPageGameDeveloper {
+	return SteamPageGameDeveloper{
+		Name: strings.TrimSpace(s.Text()),
+		URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+}
+
+package main
+
+import (
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameGenre struct {
+	Name string `json:"name"`
+	URL  string `json:"URL"`
+}
+
+func NewSteamPageGameGenre(s *goquery.Selection) SteamPageGameGenre {
+	return SteamPageGameGenre{
+		Name: strings.TrimSpace(s.Text()),
+		URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+}
+
+package main
+
+import (
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameLanguage struct {
+	Audio     bool   `json:"audio"`     // {Audio: true}
+	Interface bool   `json:"interface"` // {Interface: true}
+	Name      string `json:"name"`      // {Name: "ENGLISH"}
+	Subtitles bool   `json:"subtitles"` // {Subtitles: true}
+}
+
+func NewSteamPageGameLanguage(s *goquery.Selection) SteamPageGameLanguage {
+	var (
+		lang      = strings.TrimSpace(s.Find("td:nth-child(1)").Text())
+		inter     = strings.TrimSpace(s.Find("td:nth-child(2)").Text())
+		audio     = strings.TrimSpace(s.Find("td:nth-child(3)").Text())
+		subtitles = strings.TrimSpace(s.Find("td:nth-child(4)").Text())
+	)
+	return SteamPageGameLanguage{
+		Audio:     (len(audio) != 0),
+		Interface: (len(inter) != 0),
+		Name:      lang,
+		Subtitles: (len(subtitles) != 0)}
+}
+
+package main
+
+import (
+	"encoding/json"
+	"regexp"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameRequirement struct {
+	DirectX   string `json:"directx"`
+	Graphics  string `json:"graphics"`
+	Memory    string `json:"memory"`
+	Name      string `json:"name"`
+	Network   string `json:"network"`
+	OS        string `json:"os"`
+	Processor string `json:"processor"`
+	SoundCard string `json:"soundcard"`
+	Storage   string `json:"storage"`
+}
+
+func NewSteamPageGameRequirement(s *goquery.Selection) SteamPageGameRequirement {
+	regexp := regexp.MustCompile(`[^a-zA-Z]+`)
+	steamPageGameRequirement := SteamPageGameRequirement{}
+	s.Find("ul.bb_ul").First().Each(func(i int, s *goquery.Selection) {
+		valueMap := map[string]string{}
+		s.Find("li").Each(func(j int, s *goquery.Selection) {
+			key := s.Find("strong").First().Text()
+			key = regexp.ReplaceAllString(key, "")
+			key = strings.ToLower(key)
+			valueMap[key] = strings.TrimSpace(s.Text())
+		})
+		b, err := json.Marshal(valueMap)
+		if err != nil {
+			panic(err)
+		}
+		if err := json.Unmarshal(b, &steamPageGameRequirement); err != nil {
+			panic(err)
+		}
+	})
+	return steamPageGameRequirement
+}
+
+package main
+
+import (
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamPageGameTag struct {
+	Name string `json:"name"`
+	URL  string `json:"URL"`
+}
+
+func NewSteamPageGameTag(s *goquery.Selection) SteamPageGameTag {
+	return SteamPageGameTag{
+		Name: strings.TrimSpace(s.Text()),
+		URL:  strings.TrimSpace(s.AttrOr("href", "NIL"))}
+}
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamGamePageResult struct {
+	AppID                   int                          `json:"app_ID"`
+	Categories              []SteamPageGameCategory      `json:"categories"`
+	Description             string                       `json:"description"`
+	Developers              []SteamPageGameDeveloper     `json:"developers"`
+	Genres                  []SteamPageGameGenre         `json:"genres"`
+	Languages               []SteamPageGameLanguage      `json:"languages"`
+	RequirementsMinimum     []SteamPageGameRequirement   `json:"requirements_minimum"`
+	RequirementsRecommended []SteamPageGameRequirement   `json:"requirements_recommended"`
+	ReviewsAll              SteamPageGameAggregateReview `json:"reviews_all"`
+	ReviewsRecent           SteamPageGameAggregateReview `json:"reviews_recent"`
+	Tags                    []SteamPageGameTag           `json:"tags"`
+	URL                     string                       `json:"URL"`
+	Verbose                 string                       `json:"verbose"`
+}
+
+func NewSteamPageResult(s *goquery.Selection) *SteamGamePageResult {
+
+	return &SteamGamePageResult{
+		AppID:                   scrapePageResultAppID(s),
+		Categories:              scrapePageResultCategories(s),
+		Description:             scrapePageResultDescription(s),
+		Developers:              scrapePageResultDevelopers(s),
+		Genres:                  scrapePageResultGenres(s),
+		Languages:               scrapePageResultLanguages(s),
+		RequirementsMinimum:     scrapePageResultRequirementsMinimum(s),
+		RequirementsRecommended: scrapePageResultRequirementsRecommended(s),
+		ReviewsAll:              scrapePageResultReviewsAll(s),
+		ReviewsRecent:           scrapePageResultReviewsRecent(s),
+		Tags:                    scrapePageResultGameTags(s),
+		Verbose:                 scrapePageResultVerbose(s)}
+}
+
+func scrapePageResultAppID(s *goquery.Selection) int {
+	ID, _ := strconv.Atoi(s.Find("div[data-appid]").AttrOr("data-appid", "-1"))
+	return ID
+}
+
+func scrapePageResultDescription(s *goquery.Selection) string {
+	return strings.TrimSpace(s.Find("div.game_description_snippet").Text())
+}
+
+func scrapePageResultCategories(s *goquery.Selection) []SteamPageGameCategory {
+	var steamPageGameCategories []SteamPageGameCategory
+	s.Find("div.game_area_details_specs a.name").Each(func(i int, s *goquery.Selection) {
+		steamPageGameCategories = append(steamPageGameCategories, NewSteamPageGameCategory(s))
+	})
+	return steamPageGameCategories
+}
+
+func scrapePageResultDevelopers(s *goquery.Selection) []SteamPageGameDeveloper {
+	var steamPageGameDevelopers []SteamPageGameDeveloper
+	s.Find("#developers_list a").Each(func(i int, s *goquery.Selection) {
+		steamPageGameDeveloper := NewSteamPageGameDeveloper(s)
+		steamPageGameDevelopers = append(steamPageGameDevelopers, steamPageGameDeveloper)
+	})
+	return steamPageGameDevelopers
+}
+
+func scrapePageResultGenres(s *goquery.Selection) []SteamPageGameGenre {
+	var steamPageGameGenres []SteamPageGameGenre
+	s.Find("div.game_details div.details_block:first-child > a").Each(func(i int, s *goquery.Selection) {
+		steamPageGameGenres = append(steamPageGameGenres, NewSteamPageGameGenre(s))
+	})
+	return steamPageGameGenres
+}
+
+func scrapePageResultLanguages(s *goquery.Selection) []SteamPageGameLanguage {
+	var steamPageGameLanguages []SteamPageGameLanguage
+	s.Find("table.game_language_options tr[class='']").Each(func(i int, s *goquery.Selection) {
+		steamPageGameLanguages = append(steamPageGameLanguages, NewSteamPageGameLanguage(s))
+	})
+	return steamPageGameLanguages
+}
+
+func scrapePageResultRequirementsMinimum(s *goquery.Selection) []SteamPageGameRequirement {
+	var steamPageGameRequirements []SteamPageGameRequirement
+	s.Find("div.game_area_sys_req").Each(func(i int, s *goquery.Selection) {
+		OS, ok := s.Attr("data-os")
+		if ok != true {
+			return
+		}
+		s.Find(".game_area_sys_req_full").Each(func(_ int, s *goquery.Selection) {
+			s.RemoveClass(".game_area_sys_req_full").AddClass("game_area_sys_req_leftCol")
+		})
+		s.Find(".game_area_sys_req_leftCol").First().Each(func(i int, s *goquery.Selection) {
+			steamPageGameRequirement := NewSteamPageGameRequirement(s)
+			steamPageGameRequirement.OS = OS
+			steamPageGameRequirements = append(steamPageGameRequirements, steamPageGameRequirement)
+		})
+	})
+	return steamPageGameRequirements
+}
+
+func scrapePageResultRequirementsRecommended(s *goquery.Selection) []SteamPageGameRequirement {
+	var steamPageGameRequirements []SteamPageGameRequirement
+	s.Find("div.game_area_sys_req").Each(func(i int, s *goquery.Selection) {
+		OS, ok := s.Attr("data-os")
+		if ok != true {
+			return
+		}
+		s.Find(".game_area_sys_req_full").Each(func(_ int, s *goquery.Selection) {
+			s.RemoveClass(".game_area_sys_req_full").AddClass("game_area_sys_req_leftCol")
+		})
+		s.Find(".game_area_sys_req_rightCol").First().Each(func(i int, s *goquery.Selection) {
+			steamPageGameRequirement := NewSteamPageGameRequirement(s)
+			steamPageGameRequirement.OS = OS
+			steamPageGameRequirements = append(steamPageGameRequirements, steamPageGameRequirement)
+		})
+	})
+	return steamPageGameRequirements
+}
+
+func scrapePageResultReviewsAll(s *goquery.Selection) SteamPageGameAggregateReview {
+	return NewSteamPageGameAggregateReview(s.Find(".user_reviews_summary_row[itemprop]"))
+}
+
+func scrapePageResultReviewsRecent(s *goquery.Selection) SteamPageGameAggregateReview {
+	return NewSteamPageGameAggregateReview(s.Find(".user_reviews_summary_row:not([itemprop])"))
+}
+
+func scrapePageResultGameTags(s *goquery.Selection) []SteamPageGameTag {
+	var steamPageGameTags []SteamPageGameTag
+	s.Find("a.app_tag").Each(func(i int, s *goquery.Selection) {
+		steamPageGameTags = append(steamPageGameTags, NewSteamPageGameTag(s))
+	})
+	return steamPageGameTags
+}
+
+func scrapePageResultVerbose(s *goquery.Selection) string {
+	var verbose []string
+	s.Find("#game_area_description").Contents().Each(func(i int, s *goquery.Selection) {
+		if goquery.NodeName(s) == "#text" {
+			verbose = append(verbose, strings.TrimSpace(s.Text()))
+		}
+	})
+	return strings.Join(verbose, "")
+}
+
+func writeSteamPageResult(fullpath string, s *SteamSearchResult) error {
+	err := os.MkdirAll(fullpath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	filename := fmt.Sprintf("page-result-%d.json", s.AppID)
+	fullname := filepath.Join(fullpath, filename)
+	err = ioutil.WriteFile(fullname, b, os.ModePerm)
+	return err
+}
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+)
+
+type SteamSearchResult struct {
+	AppID     int    `json:"app_ID"`
+	BundleID  int    `json:"bundle_ID"`
+	CrtrID    []int  `json:"crtr_ID"`
+	DescID    []int  `json:"desc_ID"`
+	Name      string `json:"name"`
+	PackageID int    `json:"package_ID"`
+	TagID     []int  `json:"tag_ID"`
+	URL       string `json:"URL"`
+}
+
+func NewSteamSearchResult(s *goquery.Selection) *SteamSearchResult {
+	return &SteamSearchResult{
+		AppID:     scrapeSearchResultAppID(s),
+		BundleID:  scrapeSearchResultBundleID(s),
+		CrtrID:    scrapeSearchResultCrtrID(s),
+		DescID:    scrapeSearchResultDescID(s),
+		Name:      scrapeSearchResultName(s),
+		PackageID: scrapeSearchResultPackageID(s),
+		TagID:     scrapeSearchResultTagID(s),
+		URL:       s.AttrOr("href", "NIL")}
+}
+
+func chanSteamSearchResult(c chan *SteamSearchResult, d *goquery.Document) {
+	d.Find("a.search_result_row[href]").Each(func(i int, s *goquery.Selection) {
+		defer wg.Done()
+		c <- NewSteamSearchResult(s)
+	})
+}
+
+func scrapeSearchResultAppID(s *goquery.Selection) int {
+	ID, _ := strconv.Atoi(s.AttrOr("data-ds-appid", "-1"))
+	return ID
+}
+
+func scrapeSearchResultBundleID(s *goquery.Selection) int {
+	ID, _ := strconv.Atoi(s.AttrOr("data-ds-bundleid", "-1"))
+	return ID
+}
+
+func scrapeSearchResultCrtrID(s *goquery.Selection) []int {
+	var crtrID []int
+	cID := s.AttrOr("data-ds-crtrids", "[]")
+	for _, s := range strings.Split(cID[1:len(cID)-1], ",") {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			continue
+		}
+		crtrID = append(crtrID, n)
+	}
+	return crtrID
+}
+
+func scrapeSearchResultDescID(s *goquery.Selection) []int {
+	var descID []int
+	dID := s.AttrOr("data-ds-descids", "[]")
+	for _, s := range strings.Split(dID[1:len(dID)-1], ",") {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			continue
+		}
+		descID = append(descID, n)
+	}
+	return descID
+}
+
+func scrapeSearchResultName(s *goquery.Selection) string {
+	return regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(strings.TrimSpace(s.Find(".title").Text()), "")
+}
+
+func scrapeSearchResultPackageID(s *goquery.Selection) int {
+	ID, _ := strconv.Atoi(s.AttrOr("data-ds-packageid", "-1"))
+	return ID
+}
+
+func scrapeSearchResultTagID(s *goquery.Selection) []int {
+	var tagID []int
+	tID := s.AttrOr("data-ds-tagids", "[]")
+	for _, s := range strings.Split(tID[1:len(tID)-1], ",") {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			continue
+		}
+		tagID = append(tagID, n)
+	}
+	return tagID
+}
+
+func writeSteamSearchResult(fullpath string, s *SteamSearchResult) error {
+	err := os.MkdirAll(fullpath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(b))
+	filename := fmt.Sprintf("search-result-%d.json", s.AppID)
+	fullname := filepath.Join(fullpath, filename)
+	err = ioutil.WriteFile(fullname, b, os.ModePerm)
+	return err
+}
+
+
+
+
+
+
+
