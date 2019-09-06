@@ -32,7 +32,19 @@ type Snapshot struct {
 	URL          string        `json:"URL"`
 }
 
-func NewSnapshot(HTTPMethod, URL string, req *http.Request, errReq error, res *http.Response, errRes error, timeStart, timeEnd time.Time) *Snapshot {
+func NewSnapshot(c *http.Client, HTTPMethod, URL string) *Snapshot {
+	ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://"))
+	if ok != true {
+		URL = fmt.Sprintf("https://%s", URL)
+	}
+	req, errReq := http.NewRequest(HTTPMethod, URL, nil)
+	timeStart := time.Now()
+	res, errRes := c.Do(req)
+	timeEnd := time.Now()
+	return newSnapshot(HTTPMethod, URL, req, errReq, res, errRes, timeStart, timeEnd)
+}
+
+func newSnapshot(HTTPMethod, URL string, req *http.Request, errReq error, res *http.Response, errRes error, timeStart, timeEnd time.Time) *Snapshot {
 	if errReq != nil {
 		timeStart = time.Time{}
 	}
@@ -66,33 +78,6 @@ func NewSnapshot(HTTPMethod, URL string, req *http.Request, errReq error, res *h
 		TimeEnd:      timeEnd,
 		TimeStart:    timeStart,
 		URL:          URL}
-}
-
-func chanSnapshot(c chan *Snapshot, r *http.Client, HTTPMethod, URL string) {
-	defer wg.Done()
-	snapshot := getSnapshot(r, HTTPMethod, URL)
-	user, err := user.Current()
-	if err != nil {
-		panic(err)
-	}
-	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", snapshot.request.URL.Host)
-	err = writeSnapshot(fullpath, snapshot)
-	if err != nil {
-		panic(err)
-	}
-	c <- snapshot
-}
-
-func getSnapshot(r *http.Client, HTTPMethod, URL string) *Snapshot {
-	ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://"))
-	if ok != true {
-		URL = fmt.Sprintf("https://%s", URL)
-	}
-	req, errReq := http.NewRequest(HTTPMethod, URL, nil)
-	timeStart := time.Now()
-	res, errRes := r.Do(req)
-	timeEnd := time.Now()
-	return NewSnapshot(HTTPMethod, URL, req, errReq, res, errRes, timeStart, timeEnd)
 }
 
 func writeSnapshot(fullpath string, s *Snapshot) error {
