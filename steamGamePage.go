@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -22,11 +24,13 @@ type SteamGamePage struct {
 	Genres                  []SteamPageGameGenre         `json:"genres"`
 	Languages               []SteamPageGameLanguage      `json:"languages"`
 	Name                    string                       `json:"name"`
+	Publishers              []SteamPageGamePublisher     `json:"publishers"`
 	RequirementsMinimum     []SteamPageGameRequirement   `json:"requirements_minimum"`
 	RequirementsRecommended []SteamPageGameRequirement   `json:"requirements_recommended"`
 	ReviewsAll              SteamPageGameAggregateReview `json:"reviews_all"`
 	ReviewsRecent           SteamPageGameAggregateReview `json:"reviews_recent"`
 	Tags                    []SteamPageGameTag           `json:"tags"`
+	Timestamp               time.Time                    `json:"timestamp"`
 	URL                     string                       `json:"URL"`
 	Verbose                 string                       `json:"verbose"`
 }
@@ -40,13 +44,23 @@ func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
 		Genres:                  scrapeSteamGameGenres(s),
 		Languages:               scrapeSteamGameLanguages(s),
 		Name:                    scrapeSteamGameName(s),
+		Publishers:              scrapeSteamGamePublishers(s),
 		RequirementsMinimum:     scrapeSteamGameRequirementsMinimum(s),
 		RequirementsRecommended: scrapeSteamGameRequirementsRecommended(s),
 		ReviewsAll:              scrapeSteamGameReviewsAll(s),
 		ReviewsRecent:           scrapeSteamGameReviewsRecent(s),
 		Tags:                    scrapeSteamGameGameTags(s),
+		Timestamp:               time.Now(),
 		URL:                     scrapeSteamGameURL(s),
 		Verbose:                 scrapeSteamGameVerbose(s)}
+}
+
+func chanWriteSteamGamePageDefault(s *SteamGamePage, URL string) {
+	defer wg.Done()
+	err := writeSteamGamePageDefault(s)
+	if err != nil {
+		log.Println(fmt.Sprintf("[STEAMER] PAGE %s FAILED. ERR(s): CANNOT WRITE %s", URL, err))
+	}
 }
 
 func scrapeSteamGameAppID(s *goquery.Selection) int {
@@ -93,6 +107,16 @@ func scrapeSteamGameLanguages(s *goquery.Selection) []SteamPageGameLanguage {
 
 func scrapeSteamGameName(s *goquery.Selection) string {
 	return regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(strings.TrimSpace(s.Find("div.apphub_AppName").Text()), "")
+}
+
+func scrapeSteamGamePublishers(s *goquery.Selection) []SteamPageGamePublisher {
+	var steamPageGamePublishers []SteamPageGamePublisher
+	s.Find("div.user_reviews div.dev_row .summary:not([id])").Each(func(i int, s *goquery.Selection) {
+		s.Find("a").Each(func(i int, s *goquery.Selection) {
+			steamPageGamePublishers = append(steamPageGamePublishers, NewSteamPageGamePublisher(s))
+		})
+	})
+	return steamPageGamePublishers
 }
 
 func scrapeSteamGameRequirementsMinimum(s *goquery.Selection) []SteamPageGameRequirement {
@@ -175,7 +199,7 @@ func writeSteamGamePage(fullpath string, s *SteamGamePage) error {
 	if err != nil {
 		return err
 	}
-	filename := fmt.Sprintf("page-result-%d.json", s.AppID)
+	filename := fmt.Sprintf("page-result-%s.json", s.Name)
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err
@@ -186,7 +210,7 @@ func writeSteamGamePageDefault(s *SteamGamePage) error {
 	if err != nil {
 		panic(err)
 	}
-	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", s.Name)
+	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", "games", s.Name)
 	err = writeSteamGamePage(fullpath, s)
 	return err
 }

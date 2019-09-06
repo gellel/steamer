@@ -70,15 +70,7 @@ func NewSnapshot(HTTPMethod, URL string, req *http.Request, errReq error, res *h
 
 func chanSnapshot(c chan *Snapshot, r *http.Client, HTTPMethod, URL string) {
 	defer wg.Done()
-	ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://"))
-	if ok != true {
-		URL = fmt.Sprintf("https://%s", URL)
-	}
-	req, errReq := http.NewRequest(HTTPMethod, URL, nil)
-	timeStart := time.Now()
-	res, errRes := r.Do(req)
-	timeEnd := time.Now()
-	snapshot := NewSnapshot(HTTPMethod, URL, req, errReq, res, errRes, timeStart, timeEnd)
+	snapshot := getSnapshot(r, HTTPMethod, URL)
 	user, err := user.Current()
 	if err != nil {
 		panic(err)
@@ -89,6 +81,18 @@ func chanSnapshot(c chan *Snapshot, r *http.Client, HTTPMethod, URL string) {
 		panic(err)
 	}
 	c <- snapshot
+}
+
+func getSnapshot(r *http.Client, HTTPMethod, URL string) *Snapshot {
+	ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://"))
+	if ok != true {
+		URL = fmt.Sprintf("https://%s", URL)
+	}
+	req, errReq := http.NewRequest(HTTPMethod, URL, nil)
+	timeStart := time.Now()
+	res, errRes := r.Do(req)
+	timeEnd := time.Now()
+	return NewSnapshot(HTTPMethod, URL, req, errReq, res, errRes, timeStart, timeEnd)
 }
 
 func writeSnapshot(fullpath string, s *Snapshot) error {
@@ -111,4 +115,13 @@ func writeSnapshot(fullpath string, s *Snapshot) error {
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err
+}
+
+func writeSnapshotDefault(s *Snapshot) error {
+	user, err := user.Current()
+	if err != nil {
+		return err
+	}
+	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", s.request.URL.Host)
+	return writeSnapshot(fullpath, s)
 }
