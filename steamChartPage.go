@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -37,7 +38,7 @@ func NewSteamChartPage(s *goquery.Selection) *SteamChartPage {
 		PlayerPeekDelta:  scrapeSteamChartGamePlayerPeekDelta(s)}
 }
 
-func chanWriteSteamChartPageDefault(s *SteamChartPage, URL string) {
+func chanWriteSteamChartPageDefault(wg *sync.WaitGroup, s *SteamChartPage, URL string) {
 	defer wg.Done()
 	err := writeSteamChartPageDefault(s)
 	if err != nil {
