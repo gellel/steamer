@@ -2,9 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -55,12 +56,30 @@ func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
 		Verbose:                 scrapeSteamGameVerbose(s)}
 }
 
-func chanWriteSteamGamePageDefault(s *SteamGamePage, URL string) {
-	defer wg.Done()
-	err := writeSteamGamePageDefault(s)
-	if err != nil {
-		log.Println(fmt.Sprintf("[STEAMER] PAGE %s FAILED. ERR(s): CANNOT WRITE %s", URL, err))
+func onGetSteamGamePage(c *http.Client, URL string, snap func(s *Snapshot), success func(s *SteamGamePage), err func(e error)) {
+	snapshot := NewSnapshot(c, http.MethodGet, URL)
+	snap(snapshot)
+	if ok := (snapshot.StatusCode == http.StatusOK); ok != true {
+		err(errors.New(snapshot.Status))
+		return
 	}
+	if ok := (snapshot.document != nil); ok != true {
+		err(snapshot.ErrDoc)
+		return
+	}
+	CSSSelector := "html"
+	goQuerySelection := snapshot.document.Find(CSSSelector)
+	goQuerySelectionLength := goQuerySelection.Length()
+	if ok := (goQuerySelectionLength > 0); ok != true {
+		err(errors.New("goquery.Selection empty"))
+		return
+	}
+	steamGamePage := NewSteamGamePage(goQuerySelection)
+	if ok := steamGamePage.AppID > -1; ok != true {
+		err(errors.New("SteamGamePage.AppID negative"))
+		return
+	}
+	success(steamGamePage)
 }
 
 func scrapeSteamGameAppID(s *goquery.Selection) int {
