@@ -4,25 +4,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
 type SteamGameAbbreviation struct {
-	AppID     int    `json:"app_ID"`
-	BundleID  int    `json:"bundle_ID"`
-	CrtrID    []int  `json:"crtr_ID"`
-	DescID    []int  `json:"desc_ID"`
-	Name      string `json:"name"`
-	PackageID int    `json:"package_ID"`
-	TagID     []int  `json:"tag_ID"`
-	URL       string `json:"URL"`
+	AppID     int       `json:"app_ID"`
+	BundleID  int       `json:"bundle_ID"`
+	CrtrID    []int     `json:"crtr_ID"`
+	DescID    []int     `json:"desc_ID"`
+	Name      string    `json:"name"`
+	PackageID int       `json:"package_ID"`
+	TagID     []int     `json:"tag_ID"`
+	Timestamp time.Time `json:"timestamp"`
+	URL       string    `json:"URL"`
 }
 
 func NewSteamGameAbbreviation(s *goquery.Selection) *SteamGameAbbreviation {
@@ -34,6 +37,7 @@ func NewSteamGameAbbreviation(s *goquery.Selection) *SteamGameAbbreviation {
 		Name:      scrapeSteamAbbreviationName(s),
 		PackageID: scrapeSteamAbbreviationPackageID(s),
 		TagID:     scrapeSteamAbbreviationTagID(s),
+		Timestamp: time.Now(),
 		URL:       s.AttrOr("href", "NIL")}
 }
 
@@ -42,6 +46,14 @@ func chanSteamGameAbbreviation(c chan *SteamGameAbbreviation, d *goquery.Documen
 		defer wg.Done()
 		c <- NewSteamGameAbbreviation(s)
 	})
+}
+
+func chanWriteSteamGameAbbreviationDefault(s *SteamGameAbbreviation, URL string) {
+	defer wg.Done()
+	err := writeSteamGameAbbreviationDefault(s)
+	if err != nil {
+		log.Println(fmt.Sprintf("[STEAMER] PAGE %s FAILED. ERR(s): CANNOT WRITE %s", URL, err))
+	}
 }
 
 func scrapeSteamAbbreviationAppID(s *goquery.Selection) int {
@@ -111,7 +123,7 @@ func writeSteamGameAbbreviation(fullpath string, s *SteamGameAbbreviation) error
 	if err != nil {
 		return err
 	}
-	filename := fmt.Sprintf("search-result-%d.json", s.AppID)
+	filename := fmt.Sprintf("search-result-%s.json", s.Name)
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err
@@ -122,7 +134,7 @@ func writeSteamGameAbbreviationDefault(s *SteamGameAbbreviation) error {
 	if err != nil {
 		panic(err)
 	}
-	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", s.Name)
+	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", "games", s.Name)
 	err = writeSteamGameAbbreviation(fullpath, s)
 	return err
 }
