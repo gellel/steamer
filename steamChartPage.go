@@ -2,16 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -38,12 +38,30 @@ func NewSteamChartPage(s *goquery.Selection) *SteamChartPage {
 		PlayerPeekDelta:  scrapeSteamChartGamePlayerPeekDelta(s)}
 }
 
-func chanWriteSteamChartPageDefault(wg *sync.WaitGroup, s *SteamChartPage, URL string) {
-	defer wg.Done()
-	err := writeSteamChartPageDefault(s)
-	if err != nil {
-		log.Println(fmt.Sprintf("[STEAMER] CHART %s FAILED. ERR(s): CANNOT WRITE %s", URL, err))
+func onGetSteamChartPage(c *http.Client, URL string, snap func(s *Snapshot), success func(s *SteamChartPage), err func(e error)) {
+	snapshot := NewSnapshot(c, http.MethodGet, URL)
+	snap(snapshot)
+	if ok := (snapshot.StatusCode == http.StatusOK); ok != true {
+		err(errors.New(snapshot.Status))
+		return
 	}
+	if ok := (snapshot.document != nil); ok != true {
+		err(snapshot.ErrDoc)
+		return
+	}
+	CSSSelector := "html"
+	goQuerySelection := snapshot.document.Find(CSSSelector)
+	goQuerySelectionLength := goQuerySelection.Length()
+	if ok := (goQuerySelectionLength > 0); ok != true {
+		err(errors.New("goquery.Selection empty"))
+		return
+	}
+	steamChartPage := NewSteamChartPage(goQuerySelection)
+	if ok := len(steamChartPage.Name) > 0; ok != true {
+		err(errors.New("SteamChart.AppID negative"))
+		return
+	}
+	success(steamChartPage)
 }
 
 func scrapeSteamChartGameDelta(s *goquery.Selection) time.Time {
