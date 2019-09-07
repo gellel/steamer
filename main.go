@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,8 +15,6 @@ import (
 
 const steamSearchURL string = "https://store.steampowered.com/search/"
 
-const steamSearchURLPage string = steamSearchURL + "?page=%d"
-
 var client = &http.Client{Timeout: time.Second * 10}
 
 var wg = &sync.WaitGroup{}
@@ -23,6 +22,32 @@ var wg = &sync.WaitGroup{}
 var steamSearchQueryMap = &SteamSearchQueryMap{}
 
 var scanner = bufio.NewScanner(os.Stdin)
+
+func requestQueryFrom() int {
+	var n int
+	fmt.Println("search from:")
+	if ok := scanner.Scan(); ok != true {
+		return n
+	}
+	n, err := strconv.Atoi(scanner.Text())
+	if ok := err == nil; ok != true {
+		return n
+	}
+	return n
+}
+
+func requestQueryTo() int {
+	var n int
+	fmt.Println("search to:")
+	if ok := scanner.Scan(); ok != true {
+		return n
+	}
+	n, err := strconv.Atoi(scanner.Text())
+	if ok := err == nil; ok != true {
+		return n
+	}
+	return n
+}
 
 func requestQueryOptions() string {
 	var queryString string
@@ -71,19 +96,30 @@ func requestQueryOptions() string {
 
 func main() {
 	queryString := requestQueryOptions()
-	i := 1
-	n := 1
+	i := requestQueryFrom()
+	n := requestQueryTo()
+	if i == 0 {
+		i = 1
+	}
+	if n == 0 {
+		i = 1
+	}
+	if i > n {
+		i, n = n, i
+	}
 	steamerLog := &SteamerLog{
 		PagesFrom: i,
 		PagesTo:   n,
 		PagesOK:   &SteamerLogPageOK{},
 		TimeStart: time.Now()}
 	fmt.Println("timeStart", "\t", "->", steamerLog.TimeStart)
+	URL := fmt.Sprintf("%s?", steamSearchURL)
 	if ok := len(queryString) > 0; ok {
-		fmt.Println(queryString)
+		URL = fmt.Sprintf("%s%s&", URL, queryString)
 	}
 	for i := 1; i <= n; i++ {
-		URL := fmt.Sprintf(steamSearchURLPage, i)
+		URL = fmt.Sprintf("%spage=%d", URL, i)
+		fmt.Println(URL)
 		wg.Add(1)
 		go func(client *http.Client, URL string) {
 			defer wg.Done()
