@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,33 +24,47 @@ var steamSearchQueryMap = &SteamSearchQueryMap{}
 
 var scanner = bufio.NewScanner(os.Stdin)
 
-func requestQueryFrom() int {
-	var n int
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
+}
+
+func requestInt() int {
+	if ok := scanner.Scan(); ok != true {
+		return 0
+	}
+	n, err := strconv.Atoi(scanner.Text())
+	if ok := err == nil; ok != true {
+		return 0
+	}
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func requestFarmStrategy() int {
+	fmt.Println("farm strategy:")
+	return requestInt()
+}
+
+func requestPagesFrom() int {
 	fmt.Println("search from:")
-	if ok := scanner.Scan(); ok != true {
-		return n
-	}
-	n, err := strconv.Atoi(scanner.Text())
-	if ok := err == nil; ok != true {
-		return n
-	}
-	return n
+	return requestInt()
 }
 
-func requestQueryTo() int {
-	var n int
+func requestPagesTo() int {
 	fmt.Println("search to:")
-	if ok := scanner.Scan(); ok != true {
-		return n
-	}
-	n, err := strconv.Atoi(scanner.Text())
-	if ok := err == nil; ok != true {
-		return n
-	}
-	return n
+	return requestInt()
 }
 
-func requestQueryOptions() string {
+func requestPageQuery() string {
 	var queryString string
 	req, err := http.NewRequest(http.MethodGet, steamSearchURL, nil)
 	if err != nil {
@@ -95,33 +110,68 @@ func requestQueryOptions() string {
 }
 
 func main() {
-	queryString := requestQueryOptions()
-	i := requestQueryFrom()
-	n := requestQueryTo()
-	if i == 0 {
-		i = 1
+
+	silent := flag.Bool("silent", false, "-silent (default false)")
+
+	pagesFrom := flag.Int("from", -1, "-from 1")
+
+	pagesTo := flag.Int("to", -1, "-to 2")
+
+	pageQuery := flag.String("options", "", "-options 'a b c' (default '')")
+
+	//farm := flag.Bool("farm", false, "")
+
+	//farmStrategy := flag.Int("farm-strategy", -1, "")
+
+	flag.Parse()
+
+	fmt.Println(*silent)
+
+	if ok := flag.Parsed(); ok != true {
+		return
 	}
-	if n == 0 {
-		i = 1
+	if *pagesFrom == -1 {
+		if *silent == true {
+			*pagesFrom = 1
+		} else {
+			*pagesFrom = requestPagesFrom()
+		}
 	}
-	if i > n {
-		i, n = n, i
+	if *pagesTo == -1 {
+		if *silent == true {
+			*pagesTo = *pagesFrom + 1
+		} else {
+			*pagesTo = requestPagesTo()
+		}
 	}
+	if *pageQuery == "" {
+		if *silent != true {
+			*pageQuery = requestPageQuery()
+		}
+	}
+
+	if ok := *pagesFrom > *pagesTo; ok {
+		*pagesTo, *pagesFrom = *pagesFrom, *pagesTo
+	}
+
 	steamerLog := &SteamerLog{
-		PagesFrom: i,
-		PagesTo:   n,
+		PagesFrom: *pagesFrom,
+		PagesTo:   *pagesTo,
 		PagesOK:   &SteamerLogPageOK{},
 		TimeStart: time.Now()}
+
 	fmt.Println("timeStart", "\t", "->", steamerLog.TimeStart)
 	URL := fmt.Sprintf("%s?", steamSearchURL)
-	if ok := len(queryString) > 0; ok {
-		URL = fmt.Sprintf("%s%s&", URL, queryString)
+
+	fmt.Println("pageQuery", "\t", "->", *pageQuery)
+
+	if ok := len(*pageQuery) > 0; ok {
+		URL = fmt.Sprintf("%s%s&", URL, *pageQuery)
 	}
-	for i := 1; i <= n; i++ {
-		URL = fmt.Sprintf("%spage=%d", URL, i)
-		fmt.Println(URL)
+	for i := *pagesFrom; i <= *pagesTo; i++ {
 		wg.Add(1)
 		go func(client *http.Client, URL string) {
+			fmt.Println("URL", "\t", "->", URL)
 			defer wg.Done()
 			onGetSteamGameAbbreviation(client, URL,
 				func(s *Snapshot) {
@@ -164,7 +214,7 @@ func main() {
 				},
 				func(e error) {
 				})
-		}(client, URL)
+		}(client, fmt.Sprintf("%spage=%d", URL, i))
 	}
 	wg.Wait()
 	steamerLog.TimeEnd = time.Now()
