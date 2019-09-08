@@ -32,12 +32,17 @@ type Snapshot struct {
 	URL          string        `json:"URL"`
 }
 
-func NewSnapshot(c *http.Client, HTTPMethod, URL string) *Snapshot {
+func NewSnapshot(c *http.Client, HTTPMethod, URL string, HTTPCookies *[]*http.Cookie) *Snapshot {
 	ok := (strings.HasPrefix(URL, "http://") || strings.HasPrefix(URL, "https://"))
 	if ok != true {
 		URL = fmt.Sprintf("https://%s", URL)
 	}
 	req, errReq := http.NewRequest(HTTPMethod, URL, nil)
+	if HTTPCookies != nil && req != nil {
+		for _, cookie := range *HTTPCookies {
+			req.AddCookie(cookie)
+		}
+	}
 	timeStart := time.Now()
 	res, errRes := c.Do(req)
 	timeEnd := time.Now()
