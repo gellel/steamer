@@ -15,6 +15,14 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+const (
+	colorDebug   = "\033[0;36m%s\033[0m"
+	colorError   = "\033[1;31m%s\033[0m"
+	colorInfo    = "\033[1;34m%s\033[0m"
+	colorNotice  = "\033[1;36m%s\033[0m"
+	colorWarning = "\033[1;33m%s\033[0m"
+)
+
 const steamSearchURL string = "https://store.steampowered.com/search/"
 
 var client = &http.Client{Timeout: time.Second * 10}
@@ -112,6 +120,8 @@ func requestPageQuery() string {
 
 func main() {
 
+	fmt.Println("[STEAMER START]")
+
 	flagSilent := flag.Bool("silent", false, "-silent (default false)")
 
 	flagPagesFrom := flag.Int("from", -1, "-from 1")
@@ -122,11 +132,14 @@ func main() {
 
 	flagFarm := flag.Int("farm", -1, "-farm 1")
 
+	flagVerbose := flag.Bool("verbose", false, "-verbose (default false)")
+
 	flag.Parse()
 
 	if ok := flag.Parsed(); ok != true {
 		return
 	}
+
 	if *flagPagesFrom == -1 {
 		if *flagSilent == true {
 			*flagPagesFrom = 1
@@ -134,6 +147,7 @@ func main() {
 			*flagPagesFrom = requestPagesFrom()
 		}
 	}
+
 	if *flagPagesTo == -1 {
 		if *flagSilent == true {
 			*flagPagesTo = *flagPagesFrom + 1
@@ -141,6 +155,7 @@ func main() {
 			*flagPagesTo = requestPagesTo()
 		}
 	}
+
 	if *flagPageQuery == "" {
 		if *flagSilent != true {
 			*flagPageQuery = requestPageQuery()
@@ -188,6 +203,7 @@ func main() {
 	if ok := len(*flagPageQuery) > 0; ok {
 		URL = fmt.Sprintf("%s%s&", URL, *flagPageQuery)
 	}
+
 	for i := *flagPagesFrom; i <= *flagPagesTo; i++ {
 		wg.Add(1)
 		go func(client *http.Client, URL string) {
@@ -196,6 +212,9 @@ func main() {
 			onGetSteamGameAbbreviation(client, URL,
 				func(s *Snapshot) {
 					writeSnapshotDefault(s)
+
+					if *flagVerbose {
+					}
 				},
 				func(s *SteamGameAbbreviation) {
 
@@ -207,6 +226,10 @@ func main() {
 						onGetSteamGamePage(client, URL,
 							func(s *Snapshot) {
 								writeSnapshotDefault(s)
+
+								if *flagVerbose {
+
+								}
 							},
 							func(s *SteamGamePage) {
 
@@ -218,6 +241,10 @@ func main() {
 									onGetSteamChartPage(client, URL,
 										func(s *Snapshot) {
 											writeSnapshotDefault(s)
+
+											if *flagVerbose {
+
+											}
 										},
 										func(s *SteamChartPage) {
 
@@ -242,4 +269,6 @@ func main() {
 	steamerLog.TimeDuration = steamerLog.TimeEnd.Sub(steamerLog.TimeStart)
 	writeSteamerLogDefault(steamerLog)
 	fmt.Println("timeDuration", "\t", "->", steamerLog.TimeDuration)
+	fmt.Println("[STEAMER END]")
+	time.Sleep(time.Second)
 }
