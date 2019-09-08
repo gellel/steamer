@@ -39,7 +39,7 @@ func NewSteamChartPage(s *goquery.Selection) *SteamChartPage {
 }
 
 func onGetSteamChartPage(c *http.Client, URL string, snap func(s *Snapshot), success func(s *SteamChartPage), err func(e error)) {
-	snapshot := NewSnapshot(c, http.MethodGet, URL)
+	snapshot := NewSnapshot(c, http.MethodGet, URL, nil)
 	snap(snapshot)
 	if ok := (snapshot.StatusCode == http.StatusOK); ok != true {
 		err(errors.New(snapshot.Status))

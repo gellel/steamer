@@ -57,7 +57,22 @@ func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
 }
 
 func onGetSteamGamePage(c *http.Client, URL string, snap func(s *Snapshot), success func(s *SteamGamePage), err func(e error)) {
-	snapshot := NewSnapshot(c, http.MethodGet, URL)
+
+	lastAgeCheckCookie := &http.Cookie{
+		Domain:   "store.steampowered.com",
+		HttpOnly: false,
+		Name:     "lastagecheckage",
+		Path:     "/",
+		Value:    "1-0-1940"}
+	birthtimeCookie := &http.Cookie{
+		Domain:   "store.steampowered.com",
+		HttpOnly: false,
+		Name:     "birthtime",
+		Path:     "/",
+		Value:    "-949485599"}
+
+	snapshot := NewSnapshot(c, http.MethodGet, URL, &[]*http.Cookie{birthtimeCookie, lastAgeCheckCookie})
+
 	snap(snapshot)
 	if ok := (snapshot.StatusCode == http.StatusOK); ok != true {
 		err(errors.New(snapshot.Status))
