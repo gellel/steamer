@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -83,6 +84,32 @@ func newSnapshot(HTTPMethod, URL string, req *http.Request, errReq error, res *h
 		TimeEnd:      timeEnd,
 		TimeStart:    timeStart,
 		URL:          URL}
+}
+
+func hasVisitedURL(fullpath string, URL *url.URL) (bool, error) {
+	replacer := strings.NewReplacer("https://", "", "/", "", "\\", "", URL.Host, "", "=", "-", "?", ".")
+	filename := replacer.Replace(fmt.Sprintf("%s.json", URL.String()))
+	if strings.HasPrefix(filename, ".") {
+		filename = strings.TrimPrefix(filename, ".")
+	}
+	fullname := filepath.Join(fullpath, filename)
+	_, err := os.Stat(fullname)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
+}
+
+func hasVisitedURLDefault(URL *url.URL) (bool, error) {
+	user, err := user.Current()
+	if err != nil {
+		return false, err
+	}
+	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", URL.Host)
+	return hasVisitedURL(fullpath, URL)
 }
 
 func writeSnapshot(fullpath string, s *Snapshot) error {
