@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -42,7 +43,14 @@ func NewSteamGameAbbreviation(s *goquery.Selection) *SteamGameAbbreviation {
 		URL:       s.AttrOr("href", "NIL")}
 }
 
-func onGetSteamGameAbbreviation(c *http.Client, URL string, snap func(s *Snapshot), success func(s *SteamGameAbbreviation), err func(e error)) {
+func onGetSteamGameAbbreviation(c *http.Client, URL string, revisit bool, snap func(s *Snapshot), success func(s *SteamGameAbbreviation), err func(e error)) {
+	if revisit == false {
+		if u, err := url.Parse(URL); err == nil {
+			if ok, _ := hasVisitedURLDefault(u); ok {
+				return
+			}
+		}
+	}
 	snapshot := NewSnapshot(c, http.MethodGet, URL, nil)
 	snap(snapshot)
 	if ok := (snapshot.StatusCode == http.StatusOK); ok != true {
