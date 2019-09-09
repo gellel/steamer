@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -56,8 +57,14 @@ func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
 		Verbose:                 scrapeSteamGameVerbose(s)}
 }
 
-func onGetSteamGamePage(c *http.Client, URL string, snap func(s *Snapshot), success func(s *SteamGamePage), err func(e error)) {
-
+func onGetSteamGamePage(c *http.Client, URL string, revisit bool, snap func(s *Snapshot), success func(s *SteamGamePage), err func(e error)) {
+	if revisit == false {
+		if u, err := url.Parse(URL); err == nil {
+			if ok, _ := hasVisitedURLDefault(u); ok {
+				return
+			}
+		}
+	}
 	lastAgeCheckCookie := &http.Cookie{
 		Domain:   "store.steampowered.com",
 		HttpOnly: false,
@@ -70,9 +77,7 @@ func onGetSteamGamePage(c *http.Client, URL string, snap func(s *Snapshot), succ
 		Name:     "birthtime",
 		Path:     "/",
 		Value:    "-949485599"}
-
 	snapshot := NewSnapshot(c, http.MethodGet, URL, &[]*http.Cookie{birthtimeCookie, lastAgeCheckCookie})
-
 	snap(snapshot)
 	if ok := (snapshot.StatusCode == http.StatusOK); ok != true {
 		err(errors.New(snapshot.Status))

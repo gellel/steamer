@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -35,13 +36,14 @@ var steamSearchQueryMap = &SteamSearchQueryMap{}
 var scanner = bufio.NewScanner(os.Stdin)
 
 var (
-	flagFarm      = flag.Int("farm", -1, "-farm 1")
-	flagPagesFrom = flag.Int("from", -1, "-from 1")
-	flagPagesTo   = flag.Int("to", -1, "-to 2")
-	flagPageQuery = flag.String("options", "", "-options 'a b c' (default '')")
-	flagSilent    = flag.Bool("silent", false, "-silent (default false)")
-	flagThread    = flag.Int("thread", 1, "-thread (default 1)")
-	flagVerbose   = flag.Bool("verbose", false, "-verbose (default false)")
+	flagFarm         = flag.Int("farm", -1, "-farm 1")
+	flagPagesFrom    = flag.Int("from", -1, "-from 1")
+	flagPagesTo      = flag.Int("to", -1, "-to 2")
+	flagPageQuery    = flag.String("options", "", "-options 'a b c' (default '')")
+	flagSilent       = flag.Bool("silent", false, "-silent (default false)")
+	flagThread       = flag.Int("thread", 1, "-thread (default 1)")
+	flagVerbose      = flag.Bool("verbose", false, "-verbose (default false)")
+	flagRevisitFound = flag.Int("revisit", -1, "-revisit (default -1)")
 )
 
 func exists(path string) (bool, error) {
@@ -81,6 +83,11 @@ func requestPagesFrom() int {
 
 func requestPagesTo() int {
 	fmt.Println(fmt.Sprintf("search to: (%d > N)", *flagPagesFrom))
+	return requestInt()
+}
+
+func requestRevisitStrategy() int {
+	fmt.Println("revisit found pages: (0/1/2/3)")
 	return requestInt()
 }
 
@@ -182,6 +189,14 @@ func main() {
 		*flagPagesTo, *flagPagesFrom = *flagPagesFrom, *flagPagesTo
 	}
 
+	if *flagRevisitFound == -1 {
+		if *flagSilent != true {
+			*flagRevisitFound = requestRevisitStrategy()
+		} else {
+			*flagRevisitFound = 0
+		}
+	}
+
 	if *flagFarm == -1 {
 		if *flagSilent != true {
 			*flagFarm = requestFarmStrategy()
@@ -212,6 +227,22 @@ func main() {
 
 	URL := fmt.Sprintf("%s?", steamSearchURL)
 
+	*flagRevisitFound = int(math.Abs(float64(*flagRevisitFound)))
+
+	var revisitStrategy string
+	switch *flagRevisitFound {
+	case 0:
+		revisitStrategy = "NONE"
+	case 1:
+		revisitStrategy = "PAGES"
+	case 2:
+		revisitStrategy = "PAGES + GAMES"
+	default:
+		revisitStrategy = "ALL"
+	}
+
+	fmt.Println("revisitFound", "\t", "->", revisitStrategy)
+
 	fmt.Println("timeStart", *flagThread, "\t", "->", steamerLog.TimeStart)
 
 	if ok := len(*flagPageQuery) > 0; ok {
@@ -221,13 +252,13 @@ func main() {
 	for i := *flagPagesFrom; i <= *flagPagesTo; i++ {
 		wg.Add(1)
 		go func(client *http.Client, URL string) {
-			fmt.Println("URL", "\t", "->", URL)
 			defer wg.Done()
-			onGetSteamGameAbbreviation(client, URL,
+			revisit := *flagRevisitFound > 0
+			onGetSteamGameAbbreviation(client, URL, revisit,
 				func(s *Snapshot) {
 					writeSnapshotDefault(s)
-
 					if *flagVerbose {
+						fmt.Println("URL", "\t", "->", "[PAGE]", URL)
 					}
 				},
 				func(s *SteamGameAbbreviation) {
@@ -237,12 +268,14 @@ func main() {
 					wg.Add(1)
 					go func(client *http.Client, URL string) {
 						defer wg.Done()
-						onGetSteamGamePage(client, URL,
+						revisit := *flagRevisitFound > 1
+
+						onGetSteamGamePage(client, URL, revisit,
 							func(s *Snapshot) {
 								writeSnapshotDefault(s)
 
 								if *flagVerbose {
-
+									fmt.Println("URL", "\t", "->", "[GAME]", URL)
 								}
 							},
 							func(s *SteamGamePage) {
@@ -252,12 +285,13 @@ func main() {
 								wg.Add(1)
 								go func(client *http.Client, URL string) {
 									defer wg.Done()
-									onGetSteamChartPage(client, URL,
+									revisit := *flagRevisitFound > 2
+									onGetSteamChartPage(client, URL, revisit,
 										func(s *Snapshot) {
 											writeSnapshotDefault(s)
 
 											if *flagVerbose {
-
+												fmt.Println("URL", "\t", "->", "[CHART]", URL)
 											}
 										},
 										func(s *SteamChartPage) {
