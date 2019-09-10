@@ -20,13 +20,17 @@ import (
 
 type SteamGamePage struct {
 	AppID                   int                          `json:"app_ID"`
+	Available               bool                         `json:"available"`
 	Categories              []SteamPageGameCategory      `json:"categories"`
+	ComingSoon              bool                         `json:"coming_soon"`
 	Description             string                       `json:"description"`
 	Developers              []SteamPageGameDeveloper     `json:"developers"`
+	EarlyAccess             bool                         `json:"early_access"`
 	Genres                  []SteamPageGameGenre         `json:"genres"`
 	Languages               []SteamPageGameLanguage      `json:"languages"`
 	Name                    string                       `json:"name"`
 	Publishers              []SteamPageGamePublisher     `json:"publishers"`
+	ReleaseDate             time.Time                    `json:"release_date"`
 	RequirementsMinimum     []SteamPageGameRequirement   `json:"requirements_minimum"`
 	RequirementsRecommended []SteamPageGameRequirement   `json:"requirements_recommended"`
 	ReviewsAll              SteamPageGameAggregateReview `json:"reviews_all"`
@@ -40,13 +44,17 @@ type SteamGamePage struct {
 func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
 	return &SteamGamePage{
 		AppID:                   scrapeSteamGameAppID(s),
+		Available:               scrapeSteamGameAvailable(s),
 		Categories:              scrapeSteamGameCategories(s),
+		ComingSoon:              scrapeSteamGameComingSoon(s),
 		Description:             scrapeSteamGameDescription(s),
 		Developers:              scrapeSteamGameDevelopers(s),
+		EarlyAccess:             scrapeSteamGameEarlyAccess(s),
 		Genres:                  scrapeSteamGameGenres(s),
 		Languages:               scrapeSteamGameLanguages(s),
 		Name:                    scrapeSteamGameName(s),
 		Publishers:              scrapeSteamGamePublishers(s),
+		ReleaseDate:             scrapeSteamGameReleaseDate(s),
 		RequirementsMinimum:     scrapeSteamGameRequirementsMinimum(s),
 		RequirementsRecommended: scrapeSteamGameRequirementsRecommended(s),
 		ReviewsAll:              scrapeSteamGameReviewsAll(s),
@@ -107,8 +115,8 @@ func scrapeSteamGameAppID(s *goquery.Selection) int {
 	return ID
 }
 
-func scrapeSteamGameDescription(s *goquery.Selection) string {
-	return strings.TrimSpace(s.Find("div.game_description_snippet").Text())
+func scrapeSteamGameAvailable(s *goquery.Selection) bool {
+	return (s.Find("div.game_area_comingsoon span.not_yet").First().Length() == 0)
 }
 
 func scrapeSteamGameCategories(s *goquery.Selection) []SteamPageGameCategory {
@@ -119,6 +127,16 @@ func scrapeSteamGameCategories(s *goquery.Selection) []SteamPageGameCategory {
 	return steamPageGameCategories
 }
 
+func scrapeSteamGameComingSoon(s *goquery.Selection) bool {
+	substring := strings.ReplaceAll(strings.TrimSpace(s.Find("div.coming_soon_date h1").First().Text()), " ", "-")
+	ok := strings.ToUpper(substring) == "COMING-SOON"
+	return ok
+}
+
+func scrapeSteamGameDescription(s *goquery.Selection) string {
+	return strings.TrimSpace(s.Find("div.game_description_snippet").Text())
+}
+
 func scrapeSteamGameDevelopers(s *goquery.Selection) []SteamPageGameDeveloper {
 	var steamPageGameDevelopers []SteamPageGameDeveloper
 	s.Find("#developers_list a").Each(func(i int, s *goquery.Selection) {
@@ -126,6 +144,12 @@ func scrapeSteamGameDevelopers(s *goquery.Selection) []SteamPageGameDeveloper {
 		steamPageGameDevelopers = append(steamPageGameDevelopers, steamPageGameDeveloper)
 	})
 	return steamPageGameDevelopers
+}
+
+func scrapeSteamGameEarlyAccess(s *goquery.Selection) bool {
+	substring := strings.ReplaceAll(strings.TrimSpace(s.Find("div.early_access_header h1").First().Text()), " ", "-")
+	ok := strings.ToUpper(substring) == "EARLY-ACCESS-GAME"
+	return ok
 }
 
 func scrapeSteamGameGenres(s *goquery.Selection) []SteamPageGameGenre {
@@ -156,6 +180,28 @@ func scrapeSteamGamePublishers(s *goquery.Selection) []SteamPageGamePublisher {
 		})
 	})
 	return steamPageGamePublishers
+}
+
+func scrapeSteamGameReleaseDate(s *goquery.Selection) time.Time {
+	substring := strings.TrimSpace(s.Find("div.release_date div.date").First().Text())
+	substring = strings.ReplaceAll(substring, ",", "")
+	p := strings.Split(substring, " ")
+	fmt.Println(p)
+	if ok := len(p) == 3; ok != true {
+		return time.Time{}
+	}
+	day := p[0]
+	if len(day) == 1 {
+		day = fmt.Sprintf("0%s", day)
+	}
+	month := p[1]
+	year := string(p[2][2:])
+	timestamp := fmt.Sprintf("%s %s %s 00:00 UTC", day, month, year)
+	t, err := time.Parse(time.RFC822, timestamp)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 func scrapeSteamGameRequirementsMinimum(s *goquery.Selection) []SteamPageGameRequirement {
