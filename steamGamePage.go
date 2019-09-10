@@ -35,10 +35,13 @@ type SteamGamePage struct {
 	RequirementsRecommended []SteamPageGameRequirement   `json:"requirements_recommended"`
 	ReviewsAll              SteamPageGameAggregateReview `json:"reviews_all"`
 	ReviewsRecent           SteamPageGameAggregateReview `json:"reviews_recent"`
+	SocialMedia             []SteamGameSocialMedia       `json:"social_media"`
 	Tags                    []SteamPageGameTag           `json:"tags"`
+	Title                   string                       `json:"title"`
 	Timestamp               time.Time                    `json:"timestamp"`
 	URL                     string                       `json:"URL"`
 	Verbose                 string                       `json:"verbose"`
+	Website                 string                       `json:"website"`
 }
 
 func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
@@ -59,10 +62,13 @@ func NewSteamGamePage(s *goquery.Selection) *SteamGamePage {
 		RequirementsRecommended: scrapeSteamGameRequirementsRecommended(s),
 		ReviewsAll:              scrapeSteamGameReviewsAll(s),
 		ReviewsRecent:           scrapeSteamGameReviewsRecent(s),
+		SocialMedia:             scrapeSteamGameSocialMedia(s),
 		Tags:                    scrapeSteamGameGameTags(s),
+		Title:                   scrapeSteamGameTitle(s),
 		Timestamp:               time.Now(),
 		URL:                     scrapeSteamGameURL(s),
-		Verbose:                 scrapeSteamGameVerbose(s)}
+		Verbose:                 scrapeSteamGameVerbose(s),
+		Website:                 scrapeSteamGameWebsite(s)}
 }
 
 func onGetSteamGamePage(c *http.Client, URL string, revisit bool, snap func(s *Snapshot), success func(s *SteamGamePage), err func(e error)) {
@@ -186,7 +192,6 @@ func scrapeSteamGameReleaseDate(s *goquery.Selection) time.Time {
 	substring := strings.TrimSpace(s.Find("div.release_date div.date").First().Text())
 	substring = strings.ReplaceAll(substring, ",", "")
 	p := strings.Split(substring, " ")
-	fmt.Println(p)
 	if ok := len(p) == 3; ok != true {
 		return time.Time{}
 	}
@@ -250,12 +255,42 @@ func scrapeSteamGameReviewsRecent(s *goquery.Selection) SteamPageGameAggregateRe
 	return NewSteamPageGameAggregateReview(s.Find(".user_reviews_summary_row:not([itemprop])"))
 }
 
+func scrapeSteamGameSocialMedia(s *goquery.Selection) []SteamGameSocialMedia {
+	var steamGameSocialMedia []SteamGameSocialMedia
+	s.Find("a[href][rel='noopener']").Each(func(i int, s *goquery.Selection) {
+		if s.Children().Length() == 0 {
+			return
+		}
+		href, exists := s.Attr("href")
+		if exists != true {
+			return
+		}
+		ok := strings.HasPrefix(href, "https://steamcommunity.com/linkfilter/?url")
+		if ok != true {
+			return
+		}
+		ok = strings.Contains(href, "facebook") || strings.Contains(href, "twitch") || strings.Contains(href, "twitter")
+		if ok != true {
+			return
+		}
+		/*for _, x := range s.Children().First().Nodes {
+			fmt.Println(x)
+		}*/
+		steamGameSocialMedia = append(steamGameSocialMedia, NewSteamGameSocialMedia(s))
+	})
+	return steamGameSocialMedia
+}
+
 func scrapeSteamGameGameTags(s *goquery.Selection) []SteamPageGameTag {
 	var steamPageGameTags []SteamPageGameTag
 	s.Find("a.app_tag").Each(func(i int, s *goquery.Selection) {
 		steamPageGameTags = append(steamPageGameTags, NewSteamPageGameTag(s))
 	})
 	return steamPageGameTags
+}
+
+func scrapeSteamGameTitle(s *goquery.Selection) string {
+	return strings.TrimSpace(s.Find("div.apphub_AppName").First().Text())
 }
 
 func scrapeSteamGameURL(s *goquery.Selection) string {
@@ -270,6 +305,10 @@ func scrapeSteamGameVerbose(s *goquery.Selection) string {
 		}
 	})
 	return strings.Join(verbose, "")
+}
+
+func scrapeSteamGameWebsite(s *goquery.Selection) string {
+	return strings.TrimSpace(s.Find("a[target='_blank'][href][rel='noreferrer noopener']").First().Text())
 }
 
 func writeSteamGamePage(fullpath string, s *SteamGamePage) error {

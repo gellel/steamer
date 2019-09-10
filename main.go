@@ -283,7 +283,7 @@ func main() {
 								writeSteamGamePageDefault(s)
 
 								wg.Add(1)
-								go func(client *http.Client, URL string) {
+								go func(client *http.Client, URL string, steamGamePage *SteamGamePage) {
 									defer wg.Done()
 									revisit := *flagRevisitFound > 2
 									onGetSteamChartPage(client, URL, revisit,
@@ -301,7 +301,7 @@ func main() {
 										func(e error) {
 
 										})
-								}(client, fmt.Sprintf("https://steamcharts.com/app/%d", s.AppID))
+								}(client, fmt.Sprintf("https://steamcharts.com/app/%d", s.AppID), s)
 							},
 							func(e error) {
 							})
