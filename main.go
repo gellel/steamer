@@ -41,14 +41,14 @@ var w = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 var pID = os.Getpid()
 
 var (
-	flagFarm         = flag.Int("farm", -1, "-farm 1")
-	flagPagesFrom    = flag.Int("from", -1, "-from 1")
-	flagPagesTo      = flag.Int("to", -1, "-to 2")
-	flagPageQuery    = flag.String("options", "", "-options 'tags=19' (default '')")
-	flagSilent       = flag.Bool("silent", false, "-silent (default false)")
-	flagRevisitFound = flag.Int("revisit", -1, "-revisit (default -1)")
-	flagVerbose      = flag.Bool("verbose", false, "-verbose (default false)")
-	flagWrite        = flag.Int("write", -1, "-write 0 (default -1)")
+	flagFarm      = flag.Int("farm", -1, "-farm 1")
+	flagPagesFrom = flag.Int("from", -1, "-from 1")
+	flagPagesTo   = flag.Int("to", -1, "-to 2")
+	flagPageQuery = flag.String("options", "", "-options 'tags=19' (default '')")
+	flagRevisit   = flag.Int("revisit", -1, "-revisit (default -1)")
+	flagSilent    = flag.Bool("silent", false, "-silent (default false)")
+	flagVerbose   = flag.Bool("verbose", false, "-verbose (default false)")
+	flagWrite     = flag.Int("write", -1, "-write 0 (default -1)")
 )
 
 func requestInt() int {
@@ -209,8 +209,8 @@ func main() {
 		*flagPagesTo, *flagPagesFrom = *flagPagesFrom, *flagPagesTo
 	}
 
-	if *flagRevisitFound == -1 && *flagSilent != true {
-		*flagRevisitFound = requestRevisitStrategy()
+	if *flagRevisit == -1 && *flagSilent != true {
+		*flagRevisit = requestRevisitStrategy()
 	}
 
 	if *flagWrite == -1 && *flagSilent != true {
@@ -227,7 +227,18 @@ func main() {
 
 	switch *flagFarm {
 	case 1:
-		args := []string{"-silent", "-from", fmt.Sprintf("%d", (*flagPagesTo/2)+1), "-to", fmt.Sprintf("%d", *flagPagesTo), "-options", *flagPageQuery}
+		args := []string{
+			"-silent",
+			"-from",
+			fmt.Sprintf("%d", (*flagPagesTo/2)+1),
+			"-to",
+			fmt.Sprintf("%d", *flagPagesTo),
+			"-options",
+			fmt.Sprintf("%s", *flagPageQuery),
+			"-revisit",
+			fmt.Sprintf("%d", *flagRevisit),
+			"-write",
+			fmt.Sprintf("%d", *flagWrite)}
 		cmd := exec.Command(os.Args[0], args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stdin = os.Stdin
@@ -248,7 +259,7 @@ func main() {
 
 	URL := fmt.Sprintf("%s?", steamSearchURL)
 
-	*flagRevisitFound = int(math.Abs(float64(*flagRevisitFound)))
+	*flagRevisit = int(math.Abs(float64(*flagRevisit)))
 
 	var farmStrategy string
 	switch *flagFarm {
@@ -259,7 +270,7 @@ func main() {
 	}
 
 	var revisitStrategy string
-	switch *flagRevisitFound {
+	switch *flagRevisit {
 	case 0:
 		revisitStrategy = "NONE"
 	case 1:
@@ -301,11 +312,15 @@ func main() {
 		wg.Add(1)
 		go func(client *http.Client, URL string) {
 			defer wg.Done()
-			revisit := *flagRevisitFound > 0
+			revisit := *flagRevisit > 0
 			onGetSteamGameAbbreviation(client, URL, revisit,
 				func(s *Snapshot) {
 					if *flagWrite > 0 {
-						writeSnapshotDefault(s)
+						wg.Add(1)
+						go func(s *Snapshot) {
+							defer wg.Done()
+							writeSnapshotDefault(s)
+						}(s)
 					}
 					if *flagVerbose {
 						fmt.Println("URL", "\t", "->", "[PAGE]", URL)
@@ -318,12 +333,16 @@ func main() {
 					wg.Add(1)
 					go func(client *http.Client, URL string) {
 						defer wg.Done()
-						revisit := *flagRevisitFound > 1
+						revisit := *flagRevisit > 1
 
 						onGetSteamGamePage(client, URL, revisit,
 							func(s *Snapshot) {
 								if *flagWrite > 0 {
-									writeSnapshotDefault(s)
+									wg.Add(1)
+									go func(s *Snapshot) {
+										defer wg.Done()
+										writeSnapshotDefault(s)
+									}(s)
 								}
 								if *flagVerbose {
 									fmt.Println("URL", "\t", "->", "[GAME]", URL)
@@ -336,11 +355,15 @@ func main() {
 								wg.Add(1)
 								go func(client *http.Client, URL string, steamGamePage *SteamGamePage) {
 									defer wg.Done()
-									revisit := *flagRevisitFound > 2
+									revisit := *flagRevisit > 2
 									onGetSteamChartPage(client, URL, revisit,
 										func(s *Snapshot) {
 											if *flagWrite > 0 {
-												writeSnapshotDefault(s)
+												wg.Add(1)
+												go func(s *Snapshot) {
+													defer wg.Done()
+													writeSnapshotDefault(s)
+												}(s)
 											}
 											if *flagVerbose {
 												fmt.Println("URL", "\t", "->", "[CHART]", URL)
