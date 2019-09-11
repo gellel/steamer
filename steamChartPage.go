@@ -22,9 +22,9 @@ type SteamChartPage struct {
 	Delta            time.Time              `json:"delta"`
 	Growth           []SteamChartGameGrowth `json:"growth"`
 	Name             string                 `json:"name"`
-	PlayerPeek24Hour int                    `json:"player_peak_24_hour"`
-	PlayerPeekAll    int                    `json:"player_peek_all"`
-	PlayerPeekDelta  int                    `json:"player_peek_delta"`
+	PlayerPeak24Hour int                    `json:"player_peak_24_hour"`
+	PlayerPeakAll    int                    `json:"player_peek_all"`
+	PlayerPeakDelta  int                    `json:"player_peek_delta"`
 	Timestamp        time.Time              `json:"timestamp"`
 	URL              string                 `json:"URL"`
 }
@@ -34,9 +34,9 @@ func NewSteamChartPage(s *goquery.Selection) *SteamChartPage {
 		Delta:            scrapeSteamChartGameDelta(s),
 		Growth:           scrapeSteamChartGameGrowth(s),
 		Name:             scrapeSteamChartGameName(s),
-		PlayerPeekAll:    scrapeSteamChartGamePlayerPeekAll(s),
-		PlayerPeek24Hour: scrapeSteamChartGamePlayerPeek24Hour(s),
-		PlayerPeekDelta:  scrapeSteamChartGamePlayerPeekDelta(s)}
+		PlayerPeakAll:    scrapeSteamChartGamePlayerPeakAll(s),
+		PlayerPeak24Hour: scrapeSteamChartGamePlayerPeak24Hour(s),
+		PlayerPeakDelta:  scrapeSteamChartGamePlayerPeakDelta(s)}
 }
 
 func onGetSteamChartPage(c *http.Client, URL string, revisit bool, snap func(s *Snapshot), success func(s *SteamChartPage), err func(e error)) {
@@ -92,26 +92,26 @@ func scrapeSteamChartGameName(s *goquery.Selection) string {
 	return regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(strings.TrimSpace(s.Find("#app-title").Text()), "")
 }
 
-func scrapeSteamChartGamePlayerPeek24Hour(s *goquery.Selection) int {
+func scrapeSteamChartGamePlayerPeak24Hour(s *goquery.Selection) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s.Find("#app-heading div:nth-child(3) span.num").Text()))
 	if err != nil {
-		return -1
+		return 0
 	}
 	return n
 }
 
-func scrapeSteamChartGamePlayerPeekAll(s *goquery.Selection) int {
+func scrapeSteamChartGamePlayerPeakAll(s *goquery.Selection) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s.Find("#app-heading div:nth-child(4) span.num").Text()))
 	if err != nil {
-		return -1
+		return 0
 	}
 	return n
 }
 
-func scrapeSteamChartGamePlayerPeekDelta(s *goquery.Selection) int {
+func scrapeSteamChartGamePlayerPeakDelta(s *goquery.Selection) int {
 	n, err := strconv.Atoi(strings.TrimSpace(s.Find("#app-heading div:nth-child(2) span.num").Text()))
 	if err != nil {
-		return -1
+		return 0
 	}
 	return n
 }

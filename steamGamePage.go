@@ -308,7 +308,12 @@ func scrapeSteamGameVerbose(s *goquery.Selection) string {
 }
 
 func scrapeSteamGameWebsite(s *goquery.Selection) string {
-	return strings.TrimSpace(s.Find("a[target='_blank'][href][rel='noreferrer noopener']").First().Text())
+	x := s.Find("a[href][rel].linkbar").FilterFunction(func(_ int, s *goquery.Selection) bool {
+		substring := strings.ReplaceAll(strings.TrimSpace(s.Text()), " ", "-")
+		ok := strings.ToUpper(substring) == "VISIT-THE-WEBSITE"
+		return ok
+	})
+	return strings.TrimPrefix(strings.TrimSpace(x.First().AttrOr("href", "NIL")), "https://steamcommunity.com/linkfilter/?url=")
 }
 
 func writeSteamGamePage(fullpath string, s *SteamGamePage) error {

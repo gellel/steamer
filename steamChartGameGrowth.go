@@ -11,7 +11,7 @@ type SteamChartGameGrowth struct {
 	Month          string  `json:"month"`
 	PlayersAverage float64 `json:"players_average"`
 	PlayersPeak    int     `json:"players_peak"`
-	Gain           int     `json:"gain"`
+	Gain           float64 `json:"gain"`
 	GainPercentage float64 `json:"gain_percentage"`
 }
 
@@ -24,15 +24,19 @@ func NewSteamChartGameGrowth(s *goquery.Selection) SteamChartGameGrowth {
 		PlayersPeak:    scrapeSteamChartPlayersPeak(s)}
 }
 
-func scrapeSteamChartGain(s *goquery.Selection) int {
-	n, err := strconv.Atoi(s.Find("td:nth-child(3)").Text())
+func scrapeSteamChartGain(s *goquery.Selection) float64 {
+	substring := strings.ReplaceAll(strings.TrimSpace(s.Find("td:nth-child(3)").Text()), ",", "")
+	substring = strings.TrimSuffix(strings.ReplaceAll(substring, ",", ""), "%")
+	n, err := strconv.ParseFloat(substring, 64)
 	if err != nil {
 		return -1
 	}
 	return n
 }
 func scrapeSteamChartGainPercentage(s *goquery.Selection) float64 {
-	f, err := strconv.ParseFloat(s.Find("td:nth-child(4)").Text(), 64)
+	substring := strings.TrimSpace(s.Find("td:nth-child(4)").Text())
+	substring = strings.TrimSuffix(strings.ReplaceAll(substring, ",", ""), "%")
+	f, err := strconv.ParseFloat(substring, 64)
 	if err != nil {
 		return -1
 	}

@@ -297,6 +297,8 @@ func main() {
 										func(s *SteamChartPage) {
 
 											writeSteamChartPageDefault(s)
+
+											writeSteamGameSummaryDefault(NewSteamGameSummary(steamGamePage, s))
 										},
 										func(e error) {
 
