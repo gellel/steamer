@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -150,39 +151,68 @@ func writeSteamGameSummaryCSV(fullpath string, s *SteamGameSummary) error {
 	}
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-	rows := [][]string{
-		[]string{"Available", fmt.Sprintf("%t", s.Available)},
-		[]string{"Average Decline", fmt.Sprintf("%d", s.AverageDecline)},
-		[]string{"Average Gain", fmt.Sprintf("%d", s.AverageGain)},
-		[]string{"Average Max Player Count", fmt.Sprintf("%d", s.AverageMaxPlayerCount)},
-		[]string{"Average Min Player Count", fmt.Sprintf("%d", s.AverageMinPlayerCount)},
-		[]string{"Average Player Count", fmt.Sprintf("%d", s.AveragePlayerCount)},
-		append([]string{"Categories"}, s.Categories...),
-		[]string{"ComingSoon", fmt.Sprintf("%t", s.ComingSoon)},
-		append([]string{"Developers"}, s.Developers...),
-		[]string{"Early Access", fmt.Sprintf("%t", s.EarlyAccess)},
-		append([]string{"Genres"}, s.Genres...),
-		[]string{"Name", s.Name},
-		[]string{"Months Since Release", fmt.Sprintf("%d", s.MonthsSinceRelease)},
-		[]string{"Peak Players", fmt.Sprintf("%d", s.PeakPlayers)},
-		[]string{"Peak Players Date", s.PeakPlayersDate},
-		[]string{"Player Peak 24 Hour", fmt.Sprintf("%d", s.PlayerPeak24Hour)},
-		[]string{"Player Peak All", fmt.Sprintf("%d", s.PlayerPeakAll)},
-		append([]string{"Publishers"}, s.Publishers...),
-		[]string{"Release Date", s.ReleaseDate.String()},
-		[]string{"Reviews All Count", fmt.Sprintf("%d", s.ReviewsAllCount)},
-		[]string{"Reviews All Sentiment", s.ReviewsAllSentiment},
-		[]string{"Reviews Recent Count", fmt.Sprintf("%d", s.ReviewsRecentCount)},
-		[]string{"Reviews Recent Sentiment", s.ReviewsRecentSentiment},
-		append([]string{"Social Media"}, s.SocialMedia...),
-		append([]string{"Tags"}, s.Tags...),
-		[]string{"Timestamp", s.Timestamp.String()},
-		[]string{"Trough Players", fmt.Sprintf("%d", s.TroughPlayers)},
-		[]string{"Trough Players Date", s.TroughPlayersDate},
-		[]string{"URL", s.URL},
-		[]string{"Website", s.Website},
-		[]string{"Years Since Release", fmt.Sprintf("%d", s.YearsSinceRelease)}}
-	return writer.WriteAll(rows)
+
+	r := reflect.ValueOf(s).Elem()
+	t := r.Type()
+
+	var (
+		headings []string
+		values   []string
+	)
+	for i := 0; i < r.NumField(); i++ {
+		var v string
+		headings = append(headings, t.Field(i).Name)
+		x := r.Field(i).Interface()
+		switch x.(type) {
+		case []string:
+			v = strings.Join(x.([]string), ",")
+		default:
+			v = fmt.Sprintf("%v", x)
+		}
+		values = append(values, v)
+	}
+	if err := writer.Write(headings); err != nil {
+		return err
+	}
+	return writer.Write(values)
+	/*
+		rows := [][]string{
+			[]string{"Available", fmt.Sprintf("%t", s.Available)},
+			[]string{"Average Decline", fmt.Sprintf("%d", s.AverageDecline)},
+			[]string{"Average Gain", fmt.Sprintf("%d", s.AverageGain)},
+			[]string{"Average Max Player Count", fmt.Sprintf("%d", s.AverageMaxPlayerCount)},
+			[]string{"Average Min Player Count", fmt.Sprintf("%d", s.AverageMinPlayerCount)},
+			[]string{"Average Player Count", fmt.Sprintf("%d", s.AveragePlayerCount)},
+			append([]string{"Categories"}, s.Categories...),
+			[]string{"ComingSoon", fmt.Sprintf("%t", s.ComingSoon)},
+			append([]string{"Developers"}, s.Developers...),
+			[]string{"Early Access", fmt.Sprintf("%t", s.EarlyAccess)},
+			append([]string{"Genres"}, s.Genres...),
+			[]string{"Name", s.Name},
+			[]string{"Months Since Release", fmt.Sprintf("%d", s.MonthsSinceRelease)},
+			[]string{"Peak Players", fmt.Sprintf("%d", s.PeakPlayers)},
+			[]string{"Peak Players Date", s.PeakPlayersDate},
+			[]string{"Player Peak 24 Hour", fmt.Sprintf("%d", s.PlayerPeak24Hour)},
+			[]string{"Player Peak All", fmt.Sprintf("%d", s.PlayerPeakAll)},
+			append([]string{"Publishers"}, s.Publishers...),
+			[]string{"Release Date", s.ReleaseDate.String()},
+			[]string{"Reviews All Count", fmt.Sprintf("%d", s.ReviewsAllCount)},
+			[]string{"Reviews All Sentiment", s.ReviewsAllSentiment},
+			[]string{"Reviews Recent Count", fmt.Sprintf("%d", s.ReviewsRecentCount)},
+			[]string{"Reviews Recent Sentiment", s.ReviewsRecentSentiment},
+			append([]string{"Social Media"}, s.SocialMedia...),
+			append([]string{"Tags"}, s.Tags...),
+			[]string{"Timestamp", s.Timestamp.String()},
+			[]string{"Trough Players", fmt.Sprintf("%d", s.TroughPlayers)},
+			[]string{"Trough Players Date", s.TroughPlayersDate},
+			[]string{"URL", s.URL},
+			[]string{"Website", s.Website},
+			[]string{"Years Since Release", fmt.Sprintf("%d", s.YearsSinceRelease)}}
+
+		fmt.Println(len(rows))
+
+		return writer.WriteAll(rows)
+	*/
 }
 
 func writeSteamGameSummaryCSVDefault(s *SteamGameSummary) error {

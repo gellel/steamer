@@ -257,6 +257,15 @@ func main() {
 		PagesOK:   &SteamerLogPageOK{},
 		TimeStart: time.Now()}
 
+	steamerSummary := &SteamerSummary{
+		Developers: make(map[string][]string),
+		Games:      0,
+		Genres:     make(map[string]int),
+		PagesFrom:  *flagPagesFrom,
+		PagesTo:    *flagPagesTo,
+		Publishers: make(map[string][]string),
+		Sentiments: make(map[string]int)}
+
 	URL := fmt.Sprintf("%s?", steamSearchURL)
 
 	*flagRevisit = int(math.Abs(float64(*flagRevisit)))
@@ -386,6 +395,30 @@ func main() {
 
 										})
 								}(client, fmt.Sprintf("https://steamcharts.com/app/%d", s.AppID), s)
+
+								steamerSummary.Games = steamerSummary.Games + 1
+
+								for _, x := range s.Developers {
+									if m, ok := steamerSummary.Developers[x.Name]; !ok {
+										steamerSummary.Developers[x.Name] = append(m, s.Title)
+									} else {
+										steamerSummary.Developers[x.Name] = []string{s.Title}
+									}
+								}
+								for _, x := range s.Genres {
+									if n, ok := steamerSummary.Genres[x.Name]; !ok {
+										steamerSummary.Genres[x.Name] = n + 1
+									} else {
+										steamerSummary.Genres[x.Name] = 1
+									}
+								}
+								for _, x := range s.Publishers {
+									if m, ok := steamerSummary.Publishers[x.Name]; !ok {
+										steamerSummary.Publishers[x.Name] = append(m, s.Title)
+									} else {
+										steamerSummary.Publishers[x.Name] = []string{s.Title}
+									}
+								}
 							},
 							func(e error) {
 							})
@@ -402,5 +435,6 @@ func main() {
 	writeSteamerLogDefault(steamerLog)
 	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "timeDuration", "\t", "->", steamerLog.TimeDuration)
 	w.Flush()
+	writeSteamerSummaryDefault(steamerSummary)
 	time.Sleep(time.Second)
 }
