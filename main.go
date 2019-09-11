@@ -95,7 +95,7 @@ func requestVerbosity() bool {
 }
 
 func requestWriteStrategry() int {
-	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "write document condition", "\t", "->", "(< 3 DONT WRITE ALL)")
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "write document condition", "\t", "->", "(< 4 DONT WRITE ALL)")
 	return requestInt()
 }
 
@@ -327,7 +327,7 @@ func main() {
 					}
 				},
 				func(s *SteamGameAbbreviation) {
-					if *flagWrite > 1 {
+					if *flagWrite >= 1 {
 						writeSteamGameAbbreviationDefault(s)
 					}
 					wg.Add(1)
@@ -349,7 +349,7 @@ func main() {
 								}
 							},
 							func(s *SteamGamePage) {
-								if *flagWrite > 2 {
+								if *flagWrite >= 2 {
 									writeSteamGamePageDefault(s)
 								}
 								wg.Add(1)
@@ -370,10 +370,17 @@ func main() {
 											}
 										},
 										func(s *SteamChartPage) {
-											if *flagWrite > 3 {
+											steamGameSummary := NewSteamGameSummary(steamGamePage, s)
+											if *flagWrite >= 3 {
 												writeSteamChartPageDefault(s)
 											}
-											writeSteamGameSummaryDefault(NewSteamGameSummary(steamGamePage, s))
+											if *flagWrite >= 4 {
+												writeSteamGameSummaryDefault(steamGameSummary)
+											}
+											err := writeSteamGameSummaryCSVDefault(steamGameSummary)
+											if err != nil {
+												panic(err)
+											}
 										},
 										func(e error) {
 

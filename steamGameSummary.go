@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -137,11 +138,65 @@ func parseSteamGameSummaryTags(s *[]SteamPageGameTag) []string {
 	return tags
 }
 
-func writeSteamGameSummary(fullpath string, s *SteamGameSummary) error {
+func writeSteamGameSummaryCSV(fullpath string, s *SteamGameSummary) error {
 	err := os.MkdirAll(fullpath, os.ModePerm)
 	if err != nil {
 		return err
 	}
+	file, err := os.Create(filepath.Join(fullpath, "summary.csv"))
+	defer file.Close()
+	if err != nil {
+		return err
+	}
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	rows := [][]string{
+		[]string{"Available", fmt.Sprintf("%t", s.Available)},
+		[]string{"Average Decline", fmt.Sprintf("%d", s.AverageDecline)},
+		[]string{"Average Gain", fmt.Sprintf("%d", s.AverageGain)},
+		[]string{"Average Max Player Count", fmt.Sprintf("%d", s.AverageMaxPlayerCount)},
+		[]string{"Average Min Player Count", fmt.Sprintf("%d", s.AverageMinPlayerCount)},
+		[]string{"Average Player Count", fmt.Sprintf("%d", s.AveragePlayerCount)},
+		append([]string{"Categories"}, s.Categories...),
+		[]string{"ComingSoon", fmt.Sprintf("%t", s.ComingSoon)},
+		append([]string{"Developers"}, s.Developers...),
+		[]string{"Early Access", fmt.Sprintf("%t", s.EarlyAccess)},
+		append([]string{"Genres"}, s.Genres...),
+		[]string{"Name", s.Name},
+		[]string{"Months Since Release", fmt.Sprintf("%d", s.MonthsSinceRelease)},
+		[]string{"Peak Players", fmt.Sprintf("%d", s.PeakPlayers)},
+		[]string{"Peak Players Date", s.PeakPlayersDate},
+		[]string{"Player Peak 24 Hour", fmt.Sprintf("%d", s.PlayerPeak24Hour)},
+		[]string{"Player Peak All", fmt.Sprintf("%d", s.PlayerPeakAll)},
+		append([]string{"Publishers"}, s.Publishers...),
+		[]string{"Release Date", s.ReleaseDate.String()},
+		[]string{"Reviews All Count", fmt.Sprintf("%d", s.ReviewsAllCount)},
+		[]string{"Reviews All Sentiment", s.ReviewsAllSentiment},
+		[]string{"Reviews Recent Count", fmt.Sprintf("%d", s.ReviewsRecentCount)},
+		[]string{"Reviews Recent Sentiment", s.ReviewsRecentSentiment},
+		append([]string{"Social Media"}, s.SocialMedia...),
+		append([]string{"Tags"}, s.Tags...),
+		[]string{"Timestamp", s.Timestamp.String()},
+		[]string{"Trough Players", fmt.Sprintf("%d", s.TroughPlayers)},
+		[]string{"Trough Players Date", s.TroughPlayersDate},
+		[]string{"URL", s.URL},
+		[]string{"Website", s.Website},
+		[]string{"Years Since Release", fmt.Sprintf("%d", s.YearsSinceRelease)}}
+	return writer.WriteAll(rows)
+}
+
+func writeSteamGameSummaryCSVDefault(s *SteamGameSummary) error {
+	user, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	fullpath := filepath.Join(user.HomeDir, "Desktop", "steambot", "games", s.Name)
+	err = writeSteamGameSummaryCSV(fullpath, s)
+	return err
+}
+
+func writeSteamGameSummary(fullpath string, s *SteamGameSummary) error {
+	err := os.MkdirAll(fullpath, os.ModePerm)
 	if err != nil {
 		return err
 	}
