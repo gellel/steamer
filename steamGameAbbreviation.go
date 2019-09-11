@@ -145,7 +145,7 @@ func writeSteamGameAbbreviation(fullpath string, s *SteamGameAbbreviation) error
 	if err != nil {
 		return err
 	}
-	filename := fmt.Sprintf("search-result-%s.json", s.Name)
+	filename := fmt.Sprintf("search-result-%s.json", strings.ToLower(s.Name))
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err

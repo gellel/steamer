@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -66,13 +67,14 @@ func NewSteamGameSummary(steamGamePage *SteamGamePage, steamChartPage *SteamChar
 		PlayerPeak24Hour:       steamChartPage.PlayerPeak24Hour,
 		PlayerPeakAll:          steamChartPage.PlayerPeakAll,
 		Publishers:             parseSteamGameSummaryPublishers(&steamGamePage.Publishers),
+		ReleaseDate:            steamGamePage.ReleaseDate,
 		ReviewsAllCount:        steamGamePage.ReviewsAll.Count,
 		ReviewsAllSentiment:    steamGamePage.ReviewsAll.Sentiment,
 		ReviewsRecentCount:     steamGamePage.ReviewsRecent.Count,
 		ReviewsRecentSentiment: steamGamePage.ReviewsRecent.Sentiment,
 		SocialMedia:            parseSteamGameSummarySocialMedia(&steamGamePage.SocialMedia),
-		Timestamp:              time.Now(),
 		Tags:                   parseSteamGameSummaryTags(&steamGamePage.Tags),
+		Timestamp:              time.Now(),
 		Title:                  steamGamePage.Title,
 		TroughPlayers:          steamGameSummaryStatistics.TroughPlayers,
 		TroughPlayersDate:      steamGameSummaryStatistics.TroughPlayersDate,
@@ -147,7 +149,7 @@ func writeSteamGameSummary(fullpath string, s *SteamGameSummary) error {
 	if err != nil {
 		return err
 	}
-	filename := fmt.Sprintf("summary-%s.json", s.Name)
+	filename := fmt.Sprintf("summary-%s.json", strings.ToLower(s.Name))
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err

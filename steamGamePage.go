@@ -328,7 +328,7 @@ func writeSteamGamePage(fullpath string, s *SteamGamePage) error {
 	if err != nil {
 		return err
 	}
-	filename := fmt.Sprintf("page-result-%s.json", s.Name)
+	filename := fmt.Sprintf("page-result-%s.json", strings.ToLower(s.Name))
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err

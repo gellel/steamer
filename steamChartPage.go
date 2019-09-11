@@ -128,7 +128,7 @@ func writeSteamChartPage(fullpath string, s *SteamChartPage) error {
 	if err != nil {
 		return err
 	}
-	filename := fmt.Sprintf("chart-result-%s.json", s.Name)
+	filename := fmt.Sprintf("chart-result-%s.json", strings.ToLower(s.Name))
 	fullname := filepath.Join(fullpath, filename)
 	err = ioutil.WriteFile(fullname, b, os.ModePerm)
 	return err

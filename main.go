@@ -38,28 +38,18 @@ var scanner = bufio.NewScanner(os.Stdin)
 
 var w = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
 
+var pID = os.Getpid()
+
 var (
 	flagFarm         = flag.Int("farm", -1, "-farm 1")
 	flagPagesFrom    = flag.Int("from", -1, "-from 1")
 	flagPagesTo      = flag.Int("to", -1, "-to 2")
-	flagPageQuery    = flag.String("options", "", "-options 'a b c' (default '')")
+	flagPageQuery    = flag.String("options", "", "-options 'tags=19' (default '')")
 	flagSilent       = flag.Bool("silent", false, "-silent (default false)")
-	flagThread       = flag.Int("thread", 1, "-thread (default 1)")
 	flagRevisitFound = flag.Int("revisit", -1, "-revisit (default -1)")
 	flagVerbose      = flag.Bool("verbose", false, "-verbose (default false)")
 	flagWrite        = flag.Int("write", -1, "-write 0 (default -1)")
 )
-
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return true, err
-}
 
 func requestInt() int {
 	if ok := scanner.Scan(); ok != true {
@@ -76,27 +66,36 @@ func requestInt() int {
 }
 
 func requestFarmStrategy() int {
-	fmt.Println("farm strategy: (1/NIL)")
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "farm strategy: (1/NIL)")
 	return requestInt()
 }
 
 func requestPagesFrom() int {
-	fmt.Println("search pages from", "\t", "->", "(MUST BE > 0)")
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "search pages from", "\t", "->", "(MUST BE > 0)")
 	return requestInt()
 }
 
 func requestPagesTo() int {
-	fmt.Println("search pages from", "\t", "->", fmt.Sprintf("(MUST BE >= %d)", *flagPagesFrom))
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "search pages from", "\t", "->", fmt.Sprintf("(MUST BE >= %d)", *flagPagesFrom))
 	return requestInt()
 }
 
 func requestRevisitStrategy() int {
-	fmt.Println("revisit page condition", "\t", "->", "(< 2 DONT REVISIT ALL)")
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "revisit page condition", "\t", "->", "(< 2 DONT REVISIT ALL)")
 	return requestInt()
 }
 
+func requestVerbosity() bool {
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "be verbose", "\t", "->", "(YES/NO)")
+	if ok := scanner.Scan(); ok != true {
+		return false
+	}
+	t := strings.ToUpper(strings.TrimSpace(scanner.Text()))
+	return (t == "Y" || t == "YE" || t == "YES" || t == "1" || t == "OK")
+}
+
 func requestWriteStrategry() int {
-	fmt.Println("write document condition", "\t", "->", "(< 3 DONT WRITE ALL)")
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "write document condition", "\t", "->", "(< 3 DONT WRITE ALL)")
 	return requestInt()
 }
 
@@ -118,27 +117,36 @@ func requestPageQuery() string {
 	if ok := (s.Length() > 0); ok != true {
 		return queryString
 	}
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "use filters", "\t", "->", "(YES/NO)")
+	if ok := scanner.Scan(); ok != true {
+		return queryString
+	}
+	t := strings.ToUpper(scanner.Text())
+	ok := (t == "Y" || t == "YE" || t == "YES" || t == "1" || t == "OK")
+	if ok != true {
+		return queryString
+	}
 	steamSearchQueryMap = NewSteamSearchQueryMap(s)
-	if ok := *flagSilent == false; ok {
-		fmt.Println("show filters: (YES/NO)")
-		if ok := scanner.Scan(); ok {
-			switch strings.ToUpper(scanner.Text()) {
-			case "Y", "YE", "YES", "YSE", "1", "OK":
-				mapLen := len(*steamSearchQueryMap)
-				queryMapKeys := make([]string, mapLen)
-				i := 0
-				for key := range *steamSearchQueryMap {
-					queryMapKeys[i] = key
-					i = i + 1
-				}
-				sort.Strings(queryMapKeys)
-				for _, key := range queryMapKeys {
-					fmt.Println(key)
-				}
-			}
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "show filters", "\t", "->", "(YES/NO)")
+	if ok := scanner.Scan(); ok != true {
+		return queryString
+	}
+	t = strings.ToUpper(scanner.Text())
+	ok = (t == "Y" || t == "YE" || t == "YES" || t == "1" || t == "OK")
+	if ok {
+		mapLen := len(*steamSearchQueryMap)
+		queryMapKeys := make([]string, mapLen)
+		i := 0
+		for key := range *steamSearchQueryMap {
+			queryMapKeys[i] = key
+			i = i + 1
+		}
+		sort.Strings(queryMapKeys)
+		for _, key := range queryMapKeys {
+			fmt.Println(key)
 		}
 	}
-	fmt.Println("search filters", "\t", "->", "(SEPARATE FILTER USING SPACES)")
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "search filters", "\t", "->", "(SEPARATE FILTER USING SPACES)")
 	if ok := scanner.Scan(); ok != true {
 		return queryString
 	}
@@ -177,55 +185,49 @@ func main() {
 		return
 	}
 
-	if *flagPagesFrom == -1 {
-		if *flagSilent == true {
-			*flagPagesFrom = 1
-		} else {
-			*flagPagesFrom = requestPagesFrom()
-		}
+	if *flagPagesFrom == -1 && *flagSilent != true {
+		*flagPagesFrom = requestPagesFrom()
 	}
 
-	if *flagPagesTo == -1 {
-		if *flagSilent == true {
-			*flagPagesTo = *flagPagesFrom + 1
-		} else {
-			*flagPagesTo = requestPagesTo()
-		}
+	if *flagPagesTo == -1 && *flagSilent != true {
+		*flagPagesTo = requestPagesTo()
 	}
 
-	if *flagPageQuery == "" {
-		if *flagSilent != true {
-			*flagPageQuery = requestPageQuery()
-		}
+	if *flagPageQuery == "" && *flagSilent != true {
+		*flagPageQuery = requestPageQuery()
+	}
+
+	if *flagPagesFrom <= 0 {
+		*flagPagesFrom = 1
+	}
+
+	if *flagPagesTo <= 0 {
+		*flagPagesTo = 1
 	}
 
 	if ok := *flagPagesFrom > *flagPagesTo; ok {
 		*flagPagesTo, *flagPagesFrom = *flagPagesFrom, *flagPagesTo
 	}
 
-	if *flagRevisitFound == -1 {
-		if *flagSilent != true {
-			*flagRevisitFound = requestRevisitStrategy()
-		} else {
-			*flagRevisitFound = 0
-		}
+	if *flagRevisitFound == -1 && *flagSilent != true {
+		*flagRevisitFound = requestRevisitStrategy()
 	}
 
-	if *flagWrite == -1 {
-		if *flagSilent != true {
-			*flagWrite = requestWriteStrategry()
-		}
+	if *flagWrite == -1 && *flagSilent != true {
+		*flagWrite = requestWriteStrategry()
 	}
 
-	if *flagFarm == -1 {
-		if *flagSilent != true {
-			*flagFarm = requestFarmStrategy()
-		}
+	if *flagFarm == -1 && *flagSilent != true {
+		*flagFarm = requestFarmStrategy()
+	}
+
+	if *flagSilent != true && *flagVerbose == false {
+		*flagVerbose = requestVerbosity()
 	}
 
 	switch *flagFarm {
 	case 1:
-		args := []string{"-silent", "-from", fmt.Sprintf("%d", (*flagPagesTo/2)+1), "-to", fmt.Sprintf("%d", *flagPagesTo), "-options", *flagPageQuery, "-thread", fmt.Sprintf("%d", *flagThread+1)}
+		args := []string{"-silent", "-from", fmt.Sprintf("%d", (*flagPagesTo/2)+1), "-to", fmt.Sprintf("%d", *flagPagesTo), "-options", *flagPageQuery}
 		cmd := exec.Command(os.Args[0], args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stdin = os.Stdin
@@ -236,7 +238,6 @@ func main() {
 			cmd.Run()
 		}()
 		*flagPagesTo = (*flagPagesTo / 2)
-	default:
 	}
 
 	steamerLog := &SteamerLog{
@@ -248,6 +249,14 @@ func main() {
 	URL := fmt.Sprintf("%s?", steamSearchURL)
 
 	*flagRevisitFound = int(math.Abs(float64(*flagRevisitFound)))
+
+	var farmStrategy string
+	switch *flagFarm {
+	case 1:
+		farmStrategy = "EVEN"
+	default:
+		farmStrategy = "NONE"
+	}
 
 	var revisitStrategy string
 	switch *flagRevisitFound {
@@ -274,11 +283,13 @@ func main() {
 		writeStrategy = "ALL"
 	}
 
-	fmt.Fprintln(w, "revisit", "\t", "->", revisitStrategy)
+	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "farm", "\t", "->", farmStrategy)
 
-	fmt.Fprintln(w, "write", "\t", "->", writeStrategy)
+	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "revisit", "\t", "->", revisitStrategy)
 
-	fmt.Fprintln(w, "timeStart", *flagThread, "\t", "->", steamerLog.TimeStart)
+	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "write", "\t", "->", writeStrategy)
+
+	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "timeStart", "\t", "->", steamerLog.TimeStart)
 
 	w.Flush()
 
@@ -356,10 +367,10 @@ func main() {
 	}
 	wg.Wait()
 	steamerLog.TimeEnd = time.Now()
-	fmt.Fprintln(w, "timeEnd", *flagThread, "\t", "->", steamerLog.TimeEnd)
+	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "timeEnd", "\t", "->", steamerLog.TimeEnd)
 	steamerLog.TimeDuration = steamerLog.TimeEnd.Sub(steamerLog.TimeStart)
 	writeSteamerLogDefault(steamerLog)
-	fmt.Fprintln(w, "timeDuration", *flagThread, "\t", "->", steamerLog.TimeDuration)
+	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "timeDuration", "\t", "->", steamerLog.TimeDuration)
 	w.Flush()
 	time.Sleep(time.Second)
 }

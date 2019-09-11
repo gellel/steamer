@@ -53,7 +53,8 @@ func NewSteamGameSummaryStatistics(s *SteamChartPage) SteamGameSummaryStatistics
 		averageGain = averageGain / monthsSinceRelease
 		averageMaxPlayerCount = averageMaxPlayerCount / monthsSinceRelease
 		averageMinPlayerCount = averageMinPlayerCount / monthsSinceRelease
-		yearsSinceRelease = int(monthsSinceRelease / 12)
+		averagePlayerCount = averagePlayerCount / monthsSinceRelease
+		yearsSinceRelease = monthsSinceRelease / 12
 	}
 	return SteamGameSummaryStatistics{
 		AverageDecline:        averageDecline,
