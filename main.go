@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -35,6 +36,8 @@ var steamSearchQueryMap = &SteamSearchQueryMap{}
 
 var scanner = bufio.NewScanner(os.Stdin)
 
+var w = new(tabwriter.Writer).Init(os.Stdout, 0, 8, 0, '\t', 0)
+
 var (
 	flagFarm         = flag.Int("farm", -1, "-farm 1")
 	flagPagesFrom    = flag.Int("from", -1, "-from 1")
@@ -42,8 +45,9 @@ var (
 	flagPageQuery    = flag.String("options", "", "-options 'a b c' (default '')")
 	flagSilent       = flag.Bool("silent", false, "-silent (default false)")
 	flagThread       = flag.Int("thread", 1, "-thread (default 1)")
-	flagVerbose      = flag.Bool("verbose", false, "-verbose (default false)")
 	flagRevisitFound = flag.Int("revisit", -1, "-revisit (default -1)")
+	flagVerbose      = flag.Bool("verbose", false, "-verbose (default false)")
+	flagWrite        = flag.Int("write", -1, "-write 0 (default -1)")
 )
 
 func exists(path string) (bool, error) {
@@ -77,17 +81,22 @@ func requestFarmStrategy() int {
 }
 
 func requestPagesFrom() int {
-	fmt.Println("search from: (0 > N)")
+	fmt.Println("search pages from", "\t", "->", "(MUST BE > 0)")
 	return requestInt()
 }
 
 func requestPagesTo() int {
-	fmt.Println(fmt.Sprintf("search to: (%d > N)", *flagPagesFrom))
+	fmt.Println("search pages from", "\t", "->", fmt.Sprintf("(MUST BE > %d)", *flagPagesFrom))
 	return requestInt()
 }
 
 func requestRevisitStrategy() int {
-	fmt.Println("revisit found pages: (0/1/2/3)")
+	fmt.Println("revisit page condition", "\t", "->", "(< 2 DONT REVISIT ALL)")
+	return requestInt()
+}
+
+func requestWriteStrategry() int {
+	fmt.Println("write document condition", "\t", "->", "(< 3 DONT WRITE ALL)")
 	return requestInt()
 }
 
@@ -129,23 +138,28 @@ func requestPageQuery() string {
 			}
 		}
 	}
-	fmt.Println("enter filters: 'OPTION OPTION-WITH-SPACE'")
+	fmt.Println("search filters", "\t", "->", "(SEPARATE FILTER USING SPACES)")
 	if ok := scanner.Scan(); ok != true {
 		return queryString
 	}
 	querySet := map[string][]string{}
 	for _, dataLoc := range strings.Split(strings.ToUpper(scanner.Text()), " ") {
 		steamSearchKeyValue, ok := steamSearchQueryMap.Get(dataLoc)
-		switch ok {
-		case true:
-			if _, ok := querySet[steamSearchKeyValue.Key]; !ok {
-				querySet[steamSearchKeyValue.Key] = []string{}
-			}
-			s := querySet[steamSearchKeyValue.Key]
-			s = append(s, steamSearchKeyValue.Value)
-			querySet[steamSearchKeyValue.Key] = s
-		default:
+		var key string
+		var value string
+		if ok {
+			key = steamSearchKeyValue.Key
+			value = steamSearchKeyValue.Value
+		} else {
+			key = "term"
+			value = dataLoc
 		}
+		if _, ok := querySet[key]; !ok {
+			querySet[key] = []string{}
+		}
+		s := querySet[key]
+		s = append(s, value)
+		querySet[key] = s
 	}
 	queryQueue := []string{}
 	for key, value := range querySet {
@@ -197,6 +211,12 @@ func main() {
 		}
 	}
 
+	if *flagWrite == -1 {
+		if *flagSilent != true {
+			*flagWrite = requestWriteStrategry()
+		}
+	}
+
 	if *flagFarm == -1 {
 		if *flagSilent != true {
 			*flagFarm = requestFarmStrategy()
@@ -240,10 +260,27 @@ func main() {
 	default:
 		revisitStrategy = "ALL"
 	}
+	var writeStrategy string
+	switch *flagWrite {
+	case -1:
+		writeStrategy = "SUMMARY ONLY"
+	case 0:
+		writeStrategy = "LOGS + SUMMARY"
+	case 1:
+		writeStrategy = "LOGS + ABBR + SUMMARY"
+	case 2:
+		writeStrategy = "LOGS + ABBR + GAME + SUMMARY"
+	default:
+		writeStrategy = "ALL"
+	}
 
-	fmt.Println("revisitFound", "\t", "->", revisitStrategy)
+	fmt.Fprintln(w, "revisit", "\t", "->", revisitStrategy)
 
-	fmt.Println("timeStart", *flagThread, "\t", "->", steamerLog.TimeStart)
+	fmt.Fprintln(w, "write", "\t", "->", writeStrategy)
+
+	fmt.Fprintln(w, "timeStart", *flagThread, "\t", "->", steamerLog.TimeStart)
+
+	w.Flush()
 
 	if ok := len(*flagPageQuery) > 0; ok {
 		URL = fmt.Sprintf("%s%s&", URL, *flagPageQuery)
@@ -256,15 +293,17 @@ func main() {
 			revisit := *flagRevisitFound > 0
 			onGetSteamGameAbbreviation(client, URL, revisit,
 				func(s *Snapshot) {
-					writeSnapshotDefault(s)
+					if *flagWrite > 0 {
+						writeSnapshotDefault(s)
+					}
 					if *flagVerbose {
 						fmt.Println("URL", "\t", "->", "[PAGE]", URL)
 					}
 				},
 				func(s *SteamGameAbbreviation) {
-
-					writeSteamGameAbbreviationDefault(s)
-
+					if *flagWrite > 1 {
+						writeSteamGameAbbreviationDefault(s)
+					}
 					wg.Add(1)
 					go func(client *http.Client, URL string) {
 						defer wg.Done()
@@ -272,32 +311,34 @@ func main() {
 
 						onGetSteamGamePage(client, URL, revisit,
 							func(s *Snapshot) {
-								writeSnapshotDefault(s)
-
+								if *flagWrite > 0 {
+									writeSnapshotDefault(s)
+								}
 								if *flagVerbose {
 									fmt.Println("URL", "\t", "->", "[GAME]", URL)
 								}
 							},
 							func(s *SteamGamePage) {
-
-								writeSteamGamePageDefault(s)
-
+								if *flagWrite > 2 {
+									writeSteamGamePageDefault(s)
+								}
 								wg.Add(1)
 								go func(client *http.Client, URL string, steamGamePage *SteamGamePage) {
 									defer wg.Done()
 									revisit := *flagRevisitFound > 2
 									onGetSteamChartPage(client, URL, revisit,
 										func(s *Snapshot) {
-											writeSnapshotDefault(s)
-
+											if *flagWrite > 0 {
+												writeSnapshotDefault(s)
+											}
 											if *flagVerbose {
 												fmt.Println("URL", "\t", "->", "[CHART]", URL)
 											}
 										},
 										func(s *SteamChartPage) {
-
-											writeSteamChartPageDefault(s)
-
+											if *flagWrite > 3 {
+												writeSteamChartPageDefault(s)
+											}
 											writeSteamGameSummaryDefault(NewSteamGameSummary(steamGamePage, s))
 										},
 										func(e error) {
@@ -315,9 +356,10 @@ func main() {
 	}
 	wg.Wait()
 	steamerLog.TimeEnd = time.Now()
-	fmt.Println("timeEnd", *flagThread, "\t", "->", steamerLog.TimeEnd)
+	fmt.Fprintln(w, "timeEnd", *flagThread, "\t", "->", steamerLog.TimeEnd)
 	steamerLog.TimeDuration = steamerLog.TimeEnd.Sub(steamerLog.TimeStart)
 	writeSteamerLogDefault(steamerLog)
-	fmt.Println("timeDuration", *flagThread, "\t", "->", steamerLog.TimeDuration)
+	fmt.Fprintln(w, "timeDuration", *flagThread, "\t", "->", steamerLog.TimeDuration)
+	w.Flush()
 	time.Sleep(time.Second)
 }

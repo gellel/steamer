@@ -40,46 +40,23 @@ type SteamGameSummary struct {
 	Title                  string    `json:"title"`
 	URL                    string    `json:"URL"`
 	Website                string    `json:"website"`
+	YearsSinceRelease      int       `json:"years_since_release"`
 }
 
 func NewSteamGameSummary(steamGamePage *SteamGamePage, steamChartPage *SteamChartPage) *SteamGameSummary {
-	var averageDecline, averageGain, averageMaxPlayerCount, averageMinPlayerCount, monthsSinceRelease, peakPlayers int
-	var peakPlayersDate string
-
-	if len(steamChartPage.Growth) > 0 {
-		var n int
-		for _, steamChartGameGrowth := range steamChartPage.Growth {
-			if steamChartGameGrowth.Gain > 0 {
-				averageGain = averageGain + int(steamChartGameGrowth.Gain)
-				averageMaxPlayerCount = averageMaxPlayerCount + steamChartGameGrowth.PlayersPeak
-			} else {
-				averageDecline = averageDecline + int(steamChartGameGrowth.Gain)
-				averageMinPlayerCount = averageMinPlayerCount + steamChartGameGrowth.PlayersPeak
-			}
-			if steamChartGameGrowth.PlayersPeak > peakPlayers {
-				peakPlayers = steamChartGameGrowth.PlayersPeak
-				peakPlayersDate = steamChartGameGrowth.Month
-			}
-			n = n + 1
-		}
-		monthsSinceRelease = int(n / 12)
-		averageDecline = averageDecline / n
-		averageGain = averageGain / n
-		averageMaxPlayerCount = averageMaxPlayerCount / n
-		averageMinPlayerCount = averageMinPlayerCount / n
-	}
+	steamGameSummaryStatistics := NewSteamGameSummaryStatistics(steamChartPage)
 	return &SteamGameSummary{
 		Available:              steamGamePage.Available,
-		AverageDecline:         averageDecline,
-		AverageGain:            averageGain,
-		AverageMaxPlayerCount:  averageMaxPlayerCount,
-		AverageMinPlayerCount:  averageMinPlayerCount,
+		AverageDecline:         steamGameSummaryStatistics.AverageDecline,
+		AverageGain:            steamGameSummaryStatistics.AverageGain,
+		AverageMaxPlayerCount:  steamGameSummaryStatistics.AverageMaxPlayerCount,
+		AverageMinPlayerCount:  steamGameSummaryStatistics.AverageMinPlayerCount,
 		ComingSoon:             steamGamePage.ComingSoon,
 		EarlyAccess:            steamGamePage.EarlyAccess,
 		Name:                   steamGamePage.Name,
-		MonthsSinceRelease:     monthsSinceRelease,
-		PeakPlayers:            peakPlayers,
-		PeakPlayersDate:        peakPlayersDate,
+		MonthsSinceRelease:     steamGameSummaryStatistics.MonthsSinceRelease,
+		PeakPlayers:            steamGameSummaryStatistics.PeakPlayers,
+		PeakPlayersDate:        steamGameSummaryStatistics.PeakPlayersDate,
 		PlayerPeak24Hour:       steamChartPage.PlayerPeak24Hour,
 		PlayerPeakAll:          steamChartPage.PlayerPeakAll,
 		ReviewsAllCount:        steamGamePage.ReviewsAll.Count,
@@ -89,7 +66,8 @@ func NewSteamGameSummary(steamGamePage *SteamGamePage, steamChartPage *SteamChar
 		Timestamp:              time.Now(),
 		Title:                  steamGamePage.Title,
 		URL:                    steamGamePage.URL,
-		Website:                steamGamePage.Website}
+		Website:                steamGamePage.Website,
+		YearsSinceRelease:      steamGameSummaryStatistics.YearsSinceRelease}
 }
 
 func writeSteamGameSummary(fullpath string, s *SteamGameSummary) error {
