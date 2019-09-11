@@ -8,10 +8,12 @@ type SteamGameSummaryStatistics struct {
 	MonthsSinceRelease    int
 	PeakPlayers           int
 	PeakPlayersDate       string
+	TroughPlayers         int
+	TroughPlayersDate     string
 	YearsSinceRelease     int
 }
 
-func NewSteamGameSummaryStatistics(s *SteamChartPage) *SteamGameSummaryStatistics {
+func NewSteamGameSummaryStatistics(s *SteamChartPage) SteamGameSummaryStatistics {
 	var (
 		averageDecline        int
 		averageGain           int
@@ -20,6 +22,8 @@ func NewSteamGameSummaryStatistics(s *SteamChartPage) *SteamGameSummaryStatistic
 		monthsSinceRelease    int
 		peakPlayers           int
 		peakPlayersDate       string
+		troughPlayers         int
+		troughPlayersDate     string
 		yearsSinceRelease     int
 	)
 	if len(s.Growth) > 0 {
@@ -35,6 +39,10 @@ func NewSteamGameSummaryStatistics(s *SteamChartPage) *SteamGameSummaryStatistic
 				peakPlayers = s.PlayersPeak
 				peakPlayersDate = s.Month
 			}
+			if s.PlayersPeak < troughPlayers {
+				troughPlayers = s.PlayersPeak
+				troughPlayersDate = s.Month
+			}
 			monthsSinceRelease = monthsSinceRelease + 1
 		}
 		averageDecline = averageDecline / monthsSinceRelease
@@ -43,7 +51,7 @@ func NewSteamGameSummaryStatistics(s *SteamChartPage) *SteamGameSummaryStatistic
 		averageMinPlayerCount = averageMinPlayerCount / monthsSinceRelease
 		yearsSinceRelease = int(monthsSinceRelease / 12)
 	}
-	return &SteamGameSummaryStatistics{
+	return SteamGameSummaryStatistics{
 		AverageDecline:        averageDecline,
 		AverageGain:           averageGain,
 		AverageMaxPlayerCount: averageMaxPlayerCount,
@@ -51,5 +59,7 @@ func NewSteamGameSummaryStatistics(s *SteamChartPage) *SteamGameSummaryStatistic
 		MonthsSinceRelease:    monthsSinceRelease,
 		PeakPlayers:           peakPlayers,
 		PeakPlayersDate:       peakPlayersDate,
+		TroughPlayers:         troughPlayers,
+		TroughPlayersDate:     troughPlayersDate,
 		YearsSinceRelease:     yearsSinceRelease}
 }

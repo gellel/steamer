@@ -38,6 +38,8 @@ type SteamGameSummary struct {
 	Tags                   []string  `json:"tags"`
 	Timestamp              time.Time `json:"timestamp"`
 	Title                  string    `json:"title"`
+	TroughPlayers          int       `json:"trough_players"`
+	TroughPlayersDate      string    `json:"trough_players_date"`
 	URL                    string    `json:"URL"`
 	Website                string    `json:"website"`
 	YearsSinceRelease      int       `json:"years_since_release"`
@@ -51,23 +53,85 @@ func NewSteamGameSummary(steamGamePage *SteamGamePage, steamChartPage *SteamChar
 		AverageGain:            steamGameSummaryStatistics.AverageGain,
 		AverageMaxPlayerCount:  steamGameSummaryStatistics.AverageMaxPlayerCount,
 		AverageMinPlayerCount:  steamGameSummaryStatistics.AverageMinPlayerCount,
+		Categories:             parseSteamGameSummaryCategories(&steamGamePage.Categories),
 		ComingSoon:             steamGamePage.ComingSoon,
+		Developers:             parseSteamGameSummaryDevelopers(&steamGamePage.Developers),
 		EarlyAccess:            steamGamePage.EarlyAccess,
+		Genres:                 parseSteamGameSummaryGenres(&steamGamePage.Genres),
 		Name:                   steamGamePage.Name,
 		MonthsSinceRelease:     steamGameSummaryStatistics.MonthsSinceRelease,
 		PeakPlayers:            steamGameSummaryStatistics.PeakPlayers,
 		PeakPlayersDate:        steamGameSummaryStatistics.PeakPlayersDate,
 		PlayerPeak24Hour:       steamChartPage.PlayerPeak24Hour,
 		PlayerPeakAll:          steamChartPage.PlayerPeakAll,
+		Publishers:             parseSteamGameSummaryPublishers(&steamGamePage.Publishers),
 		ReviewsAllCount:        steamGamePage.ReviewsAll.Count,
 		ReviewsAllSentiment:    steamGamePage.ReviewsAll.Sentiment,
 		ReviewsRecentCount:     steamGamePage.ReviewsRecent.Count,
 		ReviewsRecentSentiment: steamGamePage.ReviewsRecent.Sentiment,
+		SocialMedia:            parseSteamGameSummarySocialMedia(&steamGamePage.SocialMedia),
 		Timestamp:              time.Now(),
+		Tags:                   parseSteamGameSummaryTags(&steamGamePage.Tags),
 		Title:                  steamGamePage.Title,
+		TroughPlayers:          steamGameSummaryStatistics.TroughPlayers,
+		TroughPlayersDate:      steamGameSummaryStatistics.TroughPlayersDate,
 		URL:                    steamGamePage.URL,
 		Website:                steamGamePage.Website,
 		YearsSinceRelease:      steamGameSummaryStatistics.YearsSinceRelease}
+}
+
+func parseSteamGameSummaryCategories(s *[]SteamPageGameCategory) []string {
+	v := *s
+	categories := make([]string, len(v))
+	for i, p := range v {
+		categories[i] = p.Name
+	}
+	return categories
+}
+
+func parseSteamGameSummaryDevelopers(s *[]SteamPageGameDeveloper) []string {
+	v := *s
+	developers := make([]string, len(v))
+	for i, p := range v {
+		developers[i] = p.Name
+	}
+	return developers
+}
+
+func parseSteamGameSummaryGenres(s *[]SteamPageGameGenre) []string {
+	v := *s
+	genres := make([]string, len(v))
+	for i, p := range v {
+		genres[i] = p.Name
+	}
+	return genres
+}
+
+func parseSteamGameSummaryPublishers(s *[]SteamPageGamePublisher) []string {
+	v := *s
+	publishers := make([]string, len(v))
+	for i, p := range v {
+		publishers[i] = p.Name
+	}
+	return publishers
+}
+
+func parseSteamGameSummarySocialMedia(s *[]SteamGameSocialMedia) []string {
+	v := *s
+	social := make([]string, len(v))
+	for i, p := range v {
+		social[i] = p.URL
+	}
+	return social
+}
+
+func parseSteamGameSummaryTags(s *[]SteamPageGameTag) []string {
+	v := *s
+	tags := make([]string, len(v))
+	for i, p := range v {
+		tags[i] = p.Name
+	}
+	return tags
 }
 
 func writeSteamGameSummary(fullpath string, s *SteamGameSummary) error {

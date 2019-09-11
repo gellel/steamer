@@ -86,7 +86,7 @@ func requestPagesFrom() int {
 }
 
 func requestPagesTo() int {
-	fmt.Println("search pages from", "\t", "->", fmt.Sprintf("(MUST BE > %d)", *flagPagesFrom))
+	fmt.Println("search pages from", "\t", "->", fmt.Sprintf("(MUST BE >= %d)", *flagPagesFrom))
 	return requestInt()
 }
 
