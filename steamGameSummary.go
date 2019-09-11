@@ -53,6 +53,7 @@ func NewSteamGameSummary(steamGamePage *SteamGamePage, steamChartPage *SteamChar
 		AverageGain:            steamGameSummaryStatistics.AverageGain,
 		AverageMaxPlayerCount:  steamGameSummaryStatistics.AverageMaxPlayerCount,
 		AverageMinPlayerCount:  steamGameSummaryStatistics.AverageMinPlayerCount,
+		AveragePlayerCount:     steamGameSummaryStatistics.AveragePlayerCount,
 		Categories:             parseSteamGameSummaryCategories(&steamGamePage.Categories),
 		ComingSoon:             steamGamePage.ComingSoon,
 		Developers:             parseSteamGameSummaryDevelopers(&steamGamePage.Developers),
