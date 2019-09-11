@@ -32,6 +32,8 @@ var client = &http.Client{Timeout: time.Second * 10}
 
 var wg = &sync.WaitGroup{}
 
+var mu = &sync.Mutex{}
+
 var steamSearchQueryMap = &SteamSearchQueryMap{}
 
 var scanner = bufio.NewScanner(os.Stdin)
@@ -76,7 +78,7 @@ func requestPagesFrom() int {
 }
 
 func requestPagesTo() int {
-	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "search pages from", "\t", "->", fmt.Sprintf("(MUST BE >= %d)", *flagPagesFrom))
+	fmt.Println(fmt.Sprintf("[steam][%d]", pID), "search pages to", "\t", "->", fmt.Sprintf("(MUST BE >= %d)", *flagPagesFrom))
 	return requestInt()
 }
 
@@ -266,6 +268,8 @@ func main() {
 		Publishers: make(map[string][]string),
 		Sentiments: make(map[string]int)}
 
+	steamGameSummaryCSV := []SteamSummaryCSV{}
+
 	URL := fmt.Sprintf("%s?", steamSearchURL)
 
 	*flagRevisit = int(math.Abs(float64(*flagRevisit)))
@@ -386,16 +390,14 @@ func main() {
 											if *flagWrite >= 4 {
 												writeSteamGameSummaryDefault(steamGameSummary)
 											}
-											err := writeSteamGameSummaryCSVDefault(steamGameSummary)
-											if err != nil {
-												panic(err)
-											}
+											steamGameSummaryCSV = append(steamGameSummaryCSV, NewSteamSummaryCSV(steamGameSummary))
 										},
 										func(e error) {
 
 										})
 								}(client, fmt.Sprintf("https://steamcharts.com/app/%d", s.AppID), s)
 
+								mu.Lock()
 								steamerSummary.Games = steamerSummary.Games + 1
 
 								for _, x := range s.Developers {
@@ -419,6 +421,7 @@ func main() {
 										steamerSummary.Publishers[x.Name] = []string{s.Title}
 									}
 								}
+								mu.Unlock()
 							},
 							func(e error) {
 							})
@@ -436,5 +439,7 @@ func main() {
 	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "timeDuration", "\t", "->", steamerLog.TimeDuration)
 	w.Flush()
 	writeSteamerSummaryDefault(steamerSummary)
+	filename := fmt.Sprintf("summary-%d-%d", *flagPagesFrom, *flagPagesTo)
+	fmt.Println(writeSteamSummaryCSVDefault(filename, &steamGameSummaryCSV))
 	time.Sleep(time.Second)
 }
