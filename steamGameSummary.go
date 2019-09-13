@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 )
 
 type SteamGameSummary struct {
@@ -75,7 +79,7 @@ func NewSteamGameSummary(steamGamePage *SteamGamePage, steamChartPage *SteamChar
 		SocialMedia:            parseSteamGameSummarySocialMedia(&steamGamePage.SocialMedia),
 		Tags:                   parseSteamGameSummaryTags(&steamGamePage.Tags),
 		Timestamp:              time.Now(),
-		Title:                  steamGamePage.Title,
+		Title:                  parseSteamGameSummaryTitle(steamGamePage.Title),
 		TroughPlayers:          steamGameSummaryStatistics.TroughPlayers,
 		TroughPlayersDate:      steamGameSummaryStatistics.TroughPlayersDate,
 		URL:                    steamGamePage.URL,
@@ -135,6 +139,15 @@ func parseSteamGameSummaryTags(s *[]SteamPageGameTag) []string {
 		tags[i] = p.Name
 	}
 	return tags
+}
+
+func parseSteamGameSummaryTitle(s string) string {
+	transformer := transform.Chain(norm.NFD, transform.RemoveFunc(func(r rune) bool { return unicode.Is(unicode.Mn, r) }), norm.NFC)
+	x, _, err := transform.String(transformer, s)
+	if err != nil {
+		return s
+	}
+	return x
 }
 
 func writeSteamGameSummary(fullpath string, s *SteamGameSummary) error {
