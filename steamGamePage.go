@@ -294,7 +294,7 @@ func scrapeSteamGameTitle(s *goquery.Selection) string {
 }
 
 func scrapeSteamGameURL(s *goquery.Selection) string {
-	return strings.TrimSpace(s.Find("link[rel='canonical'][href]").First().Text())
+	return strings.TrimSpace(s.Find("link[rel='canonical'][href]").First().AttrOr("href", ""))
 }
 
 func scrapeSteamGameVerbose(s *goquery.Selection) string {
