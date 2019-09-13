@@ -439,7 +439,7 @@ func main() {
 	fmt.Fprintln(w, fmt.Sprintf("[steam][%d]", pID), "timeDuration", "\t", "->", steamerLog.TimeDuration)
 	w.Flush()
 	writeSteamerSummaryDefault(steamerSummary)
-	filename := fmt.Sprintf("%s-summary-%d-%d", time.Now().String(), *flagPagesFrom, *flagPagesTo)
+	filename := fmt.Sprintf("%d-%d-%d-summary.csv", time.Now().UnixNano(), *flagPagesFrom, *flagPagesTo)
 	fmt.Println(writeSteamSummaryCSVDefault(filename, &steamGameSummaryCSV))
 	time.Sleep(time.Second)
 }
